@@ -3,7 +3,11 @@
   "displayName": "Caspian Security Extension",
   "description": "Automatically runs security checks on your code, identifying vulnerabilities, unsafe practices, and security best practices",
   "icon": "icon.png",
-  "version": "1.0.2",
+  "repository": {
+  "type": "git",
+  "url": "https://github.com/CaspianTools/caspian-security"
+},
+  "version": "1.0.3",
   "publisher": "CaspianTools",
   "engines": {
     "vscode": "^1.85.0"
