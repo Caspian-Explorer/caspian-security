@@ -1,0 +1,134 @@
+import { SecurityRule, SecuritySeverity, SecurityCategory, RuleType } from '../types';
+
+export const inputValidationRules: SecurityRule[] = [
+  {
+    code: 'XSS001',
+    message: 'Use of innerHTML can lead to XSS attacks',
+    severity: SecuritySeverity.Error,
+    patterns: [
+      /\.innerHTML\s*=/,
+      /\.outerHTML\s*=/,
+    ],
+    suggestion: 'Use textContent, createElement, or a sanitization library like DOMPurify',
+    category: SecurityCategory.InputValidationXSS,
+    ruleType: RuleType.CodeDetectable,
+  },
+  {
+    code: 'XSS002',
+    message: 'Dangerous use of document.write()',
+    severity: SecuritySeverity.Error,
+    patterns: [
+      /document\.write\s*\(/,
+      /document\.writeln\s*\(/,
+    ],
+    suggestion: 'Use DOM manipulation methods instead of document.write()',
+    category: SecurityCategory.InputValidationXSS,
+    ruleType: RuleType.CodeDetectable,
+  },
+  {
+    code: 'XSS003',
+    message: 'Unsanitized user input in HTML string concatenation',
+    severity: SecuritySeverity.Warning,
+    patterns: [
+      /['"].*<[a-z].*['"].*\+.*(?:req|request|params|query|body)\./i,
+    ],
+    suggestion: 'Sanitize user input before embedding in HTML; use contextual escaping',
+    category: SecurityCategory.InputValidationXSS,
+    ruleType: RuleType.CodeDetectable,
+  },
+  {
+    code: 'XSS004',
+    message: 'Use of dangerouslySetInnerHTML in React component',
+    severity: SecuritySeverity.Warning,
+    patterns: [
+      /dangerouslySetInnerHTML/,
+    ],
+    suggestion: 'Sanitize content with DOMPurify before using dangerouslySetInnerHTML',
+    category: SecurityCategory.InputValidationXSS,
+    ruleType: RuleType.CodeDetectable,
+  },
+  {
+    code: 'XSS005',
+    message: 'Unescaped output in template engine',
+    severity: SecuritySeverity.Warning,
+    patterns: [
+      /\{!!.*!!\}/,
+      /\|\s*safe\b/,
+    ],
+    suggestion: 'Use auto-escaping template syntax; only bypass escaping when input is fully sanitized',
+    category: SecurityCategory.InputValidationXSS,
+    ruleType: RuleType.CodeDetectable,
+  },
+  {
+    code: 'XSS006',
+    message: 'Request parameters used without validation',
+    severity: SecuritySeverity.Warning,
+    patterns: [
+      /req\.(?:body|query|params)\.\w+\s*[;)]/,
+      /request\.(?:GET|POST|form)\[/i,
+    ],
+    suggestion: 'Validate and sanitize all request parameters using a validation library (e.g., joi, zod, express-validator)',
+    category: SecurityCategory.InputValidationXSS,
+    ruleType: RuleType.Informational,
+  },
+  {
+    code: 'XSS007',
+    message: 'Angular security bypass function used',
+    severity: SecuritySeverity.Warning,
+    patterns: [
+      /bypassSecurityTrust(?:Html|Script|Style|Url|ResourceUrl)/,
+    ],
+    suggestion: 'Avoid bypassing Angular sanitization unless input is fully trusted and validated',
+    category: SecurityCategory.InputValidationXSS,
+    ruleType: RuleType.CodeDetectable,
+  },
+  {
+    code: 'XSS008',
+    message: 'Reminder: Implement Content Security Policy (CSP) headers',
+    severity: SecuritySeverity.Info,
+    patterns: [
+      /Content-Security-Policy/i,
+    ],
+    suggestion: 'Configure CSP headers to restrict inline scripts and resource origins',
+    category: SecurityCategory.InputValidationXSS,
+    ruleType: RuleType.Informational,
+  },
+  {
+    code: 'XSS009',
+    message: 'User input used without length validation',
+    severity: SecuritySeverity.Warning,
+    patterns: [
+      /req\.(?:body|query|params)\.\w+\s*(?:&&|!==?\s*(?:undefined|null|''))/,
+      /request\.(?:form|args|GET|POST)\[.*\]\s*(?:and|is\s+not\s+None|!=\s*None)/i,
+    ],
+    suggestion: 'Validate input length/size (e.g., maxLength, minLength) before processing to prevent buffer overflows and DoS',
+    category: SecurityCategory.InputValidationXSS,
+    ruleType: RuleType.Informational,
+  },
+  {
+    code: 'XSS010',
+    message: 'Possible user input in inline script context without encoding',
+    severity: SecuritySeverity.Error,
+    patterns: [
+      /<script[^>]*>.*\$\{/,
+      /<script[^>]*>.*\+\s*(?:req|request|params|query|body|user)/i,
+      /['"]<script[^>]*>['"].*\+/,
+    ],
+    suggestion: 'Never interpolate user input into JavaScript context; use JSON.stringify() or data attributes with proper escaping',
+    category: SecurityCategory.InputValidationXSS,
+    ruleType: RuleType.CodeDetectable,
+  },
+  {
+    code: 'XSS011',
+    message: 'User input in URL without encoding',
+    severity: SecuritySeverity.Warning,
+    patterns: [
+      /(?:href|src|action)\s*=\s*['"`].*\$\{.*(?:req|request|params|query|body|user)/i,
+      /(?:redirect|url|link)\s*(?:=|\()\s*['"`].*\+\s*(?:req|request|params|query|body)\./i,
+      /encodeURI(?:Component)?\s*\(\s*\)\s*/,
+    ],
+    suggestion: 'Always encode user input in URL context using encodeURIComponent(); validate URL scheme to prevent javascript: injection',
+    category: SecurityCategory.InputValidationXSS,
+    ruleType: RuleType.CodeDetectable,
+  },
+];

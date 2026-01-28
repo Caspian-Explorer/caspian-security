@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(vsce package:*)"
+      "Bash(vsce package:*)",
+      "Bash(gh issue list:*)",
+      "Bash(dir:*)",
+      "Bash(npm run compile:*)",
+      "Bash(npm run lint)"
     ]
   }
 }

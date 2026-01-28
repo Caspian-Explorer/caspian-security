@@ -1,38 +1,73 @@
 import * as vscode from 'vscode';
-import { SecurityRule, SecurityIssue, SecuritySeverity } from './types';
+import { SecurityRule, SecurityIssue, SecurityCategory, RuleType } from './types';
+import { getAllRules, getRulesByCategory, getRuleByCode as registryGetRuleByCode } from './rules';
 
 export class SecurityAnalyzer {
-  private rules: SecurityRule[];
+  private allRules: SecurityRule[];
 
   constructor() {
-    this.rules = this.initializeRules();
+    this.allRules = getAllRules();
   }
 
-  async analyzeDocument(document: vscode.TextDocument): Promise<SecurityIssue[]> {
+  async analyzeDocument(
+    document: vscode.TextDocument,
+    categories?: SecurityCategory[]
+  ): Promise<SecurityIssue[]> {
     try {
+      const rules = this.resolveRules(categories);
       const issues: SecurityIssue[] = [];
       const text = document.getText();
       const lines = text.split('\n');
+      const informationalFired = new Set<string>();
 
       for (let lineNum = 0; lineNum < lines.length; lineNum++) {
         const line = lines[lineNum];
-        
-        for (const rule of this.rules) {
+        const lineLower = line.toLowerCase();
+
+        for (const rule of rules) {
+          if (rule.ruleType === RuleType.Informational && informationalFired.has(rule.code)) {
+            continue;
+          }
+
           for (const pattern of rule.patterns) {
             try {
+              let matched = false;
+              let column = 0;
+              let matchText = '';
+
               if (typeof pattern === 'string') {
-                if (line.toLowerCase().includes(pattern.toLowerCase())) {
-                  const index = line.toLowerCase().indexOf(pattern.toLowerCase());
-                  issues.push({
-                    line: lineNum,
-                    column: index >= 0 ? index : 0,
-                    message: rule.message,
-                    severity: rule.severity,
-                    suggestion: rule.suggestion,
-                    code: rule.code,
-                    pattern: pattern,
-                  });
+                const patternLower = pattern.toLowerCase();
+                if (lineLower.includes(patternLower)) {
+                  matched = true;
+                  column = lineLower.indexOf(patternLower);
+                  matchText = pattern;
                 }
+              } else if (pattern instanceof RegExp) {
+                const match = pattern.exec(line);
+                if (match) {
+                  matched = true;
+                  column = match.index;
+                  matchText = match[0];
+                }
+              }
+
+              if (matched) {
+                issues.push({
+                  line: lineNum,
+                  column,
+                  message: rule.message,
+                  severity: rule.severity,
+                  suggestion: rule.suggestion,
+                  code: rule.code,
+                  pattern: matchText,
+                  category: rule.category,
+                });
+
+                if (rule.ruleType === RuleType.Informational) {
+                  informationalFired.add(rule.code);
+                }
+
+                break;
               }
             } catch (e) {
               console.error('Error processing pattern:', e);
@@ -48,43 +83,14 @@ export class SecurityAnalyzer {
     }
   }
 
-  private initializeRules(): SecurityRule[] {
-    return [
-      {
-        code: 'SEC001',
-        message: 'Potential SQL Injection: Use parameterized queries',
-        severity: SecuritySeverity.Error,
-        patterns: ['WHERE id = " +', 'WHERE id = \' +'],
-        suggestion: 'Use prepared statements with placeholders',
-      },
-      {
-        code: 'SEC002',
-        message: 'Hardcoded credentials detected',
-        severity: SecuritySeverity.Error,
-        patterns: ['password =', 'apiKey =', 'api_key =', 'secret ='],
-        suggestion: 'Use environment variables instead of hardcoding secrets',
-      },
-      {
-        code: 'SEC003',
-        message: 'Weak cryptographic function',
-        severity: SecuritySeverity.Warning,
-        patterns: ['createCipher', 'md5', 'sha1'],
-        suggestion: 'Use bcrypt, argon2, or PBKDF2 for secure hashing',
-      },
-      {
-        code: 'SEC004',
-        message: 'Unsafe eval() detected',
-        severity: SecuritySeverity.Error,
-        patterns: ['eval('],
-        suggestion: 'Avoid using eval() - use safer alternatives',
-      },
-      {
-        code: 'SEC005',
-        message: 'Potential path traversal vulnerability',
-        severity: SecuritySeverity.Warning,
-        patterns: ['readFileSync', 'readFile'],
-        suggestion: 'Validate and sanitize file paths',
-      },
-    ];
+  getRuleByCode(code: string): SecurityRule | undefined {
+    return registryGetRuleByCode(code);
+  }
+
+  private resolveRules(categories?: SecurityCategory[]): SecurityRule[] {
+    if (!categories || categories.length === 0) {
+      return this.allRules;
+    }
+    return categories.flatMap(cat => getRulesByCategory(cat));
   }
 }
