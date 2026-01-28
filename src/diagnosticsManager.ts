@@ -1,9 +1,8 @@
 import * as vscode from 'vscode';
-import { SecurityIssue, SecuritySeverity, DiagnosticData } from './types';
+import { SecurityIssue, SecuritySeverity, CATEGORY_LABELS } from './types';
 
 export class DiagnosticsManager {
   private diagnosticCollection: vscode.DiagnosticCollection;
-  private diagnosticMap: Map<string, vscode.Diagnostic[]> = new Map();
 
   constructor() {
     this.diagnosticCollection = vscode.languages.createDiagnosticCollection('caspian-security');
@@ -19,9 +18,10 @@ export class DiagnosticsManager {
       new vscode.Position(issue.line, issue.column + (issue.pattern?.length || 10))
     );
 
+    const categoryLabel = CATEGORY_LABELS[issue.category] || '';
     const diagnostic = new vscode.Diagnostic(
       range,
-      `${issue.code}: ${issue.message}`,
+      `[${categoryLabel}] ${issue.code}: ${issue.message}`,
       this.mapSeverity(issue.severity)
     );
 
@@ -33,12 +33,18 @@ export class DiagnosticsManager {
 
   publishDiagnostics(uri: vscode.Uri, diagnostics: vscode.Diagnostic[]): void {
     this.diagnosticCollection.set(uri, diagnostics);
-    this.diagnosticMap.set(uri.toString(), diagnostics);
   }
 
   clearDiagnostics(uri: vscode.Uri): void {
     this.diagnosticCollection.delete(uri);
-    this.diagnosticMap.delete(uri.toString());
+  }
+
+  clearAll(): void {
+    this.diagnosticCollection.clear();
+  }
+
+  dispose(): void {
+    this.diagnosticCollection.dispose();
   }
 
   private mapSeverity(severity: SecuritySeverity): vscode.DiagnosticSeverity {

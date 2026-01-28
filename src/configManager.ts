@@ -1,16 +1,37 @@
 import * as vscode from 'vscode';
+import { SecurityCategory } from './types';
+
+const CATEGORY_SETTING_KEYS: Record<SecurityCategory, string> = {
+  [SecurityCategory.AuthAccessControl]: 'enableAuthAccessControl',
+  [SecurityCategory.InputValidationXSS]: 'enableInputValidationXss',
+  [SecurityCategory.CSRFProtection]: 'enableCsrfProtection',
+  [SecurityCategory.CORSConfiguration]: 'enableCorsConfiguration',
+  [SecurityCategory.EncryptionDataProtection]: 'enableEncryptionDataProtection',
+  [SecurityCategory.APISecurity]: 'enableApiSecurity',
+  [SecurityCategory.DatabaseSecurity]: 'enableDatabaseSecurity',
+  [SecurityCategory.FileHandling]: 'enableFileHandling',
+  [SecurityCategory.SecretsCredentials]: 'enableSecretsCredentials',
+  [SecurityCategory.FrontendSecurity]: 'enableFrontendSecurity',
+  [SecurityCategory.BusinessLogicPayment]: 'enableBusinessLogicPayment',
+  [SecurityCategory.LoggingMonitoring]: 'enableLoggingMonitoring',
+};
 
 export class ConfigManager {
   private config: vscode.WorkspaceConfiguration;
+  private configChangeDisposable: vscode.Disposable;
 
   constructor() {
     this.config = vscode.workspace.getConfiguration('caspianSecurity');
-    
-    vscode.workspace.onDidChangeConfiguration((event) => {
+
+    this.configChangeDisposable = vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('caspianSecurity')) {
         this.config = vscode.workspace.getConfiguration('caspianSecurity');
       }
     });
+  }
+
+  dispose(): void {
+    this.configChangeDisposable.dispose();
   }
 
   getAutoCheck(): boolean {
@@ -51,7 +72,7 @@ export class ConfigManager {
   }
 
   setEnabledLanguages(languages: string[]): void {
-    this.config.update('enabledLanguages', languages, vscode.ConfigurationTarget.Workspace);
+    this.config.update('enabledLanguages', languages, vscode.ConfigurationTarget.Global);
   }
 
   isLanguageEnabled(languageId: string): boolean {
@@ -71,6 +92,13 @@ export class ConfigManager {
     this.setEnabledLanguages(languages);
   }
 
+  getEnabledCategories(): SecurityCategory[] {
+    return Object.values(SecurityCategory).filter(category => {
+      const key = CATEGORY_SETTING_KEYS[category];
+      return this.config.get(key, true);
+    });
+  }
+
   resetToDefaults(): void {
     this.config.update('autoCheck', true, vscode.ConfigurationTarget.Global);
     this.config.update('checkOnSave', true, vscode.ConfigurationTarget.Global);
@@ -80,5 +108,8 @@ export class ConfigManager {
       ['javascript', 'typescript', 'python', 'java', 'csharp', 'php', 'go', 'rust'],
       vscode.ConfigurationTarget.Global
     );
+    for (const key of Object.values(CATEGORY_SETTING_KEYS)) {
+      this.config.update(key, true, vscode.ConfigurationTarget.Global);
+    }
   }
 }

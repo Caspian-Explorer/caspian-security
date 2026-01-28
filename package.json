@@ -4,10 +4,10 @@
   "description": "Automatically runs security checks on your code, identifying vulnerabilities, unsafe practices, and security best practices",
   "icon": "icon.png",
   "repository": {
-  "type": "git",
-  "url": "https://github.com/CaspianTools/caspian-security"
-},
-  "version": "1.0.4",
+    "type": "git",
+    "url": "https://github.com/CaspianTools/caspian-security"
+  },
+  "version": "2.0.0",
   "publisher": "CaspianTools",
   "engines": {
     "vscode": "^1.85.0"
@@ -49,8 +49,60 @@
         "title": "Caspian Security: Check Entire Workspace"
       },
       {
+        "command": "caspian-security.runFullScan",
+        "title": "Caspian Security: Run Full Security Scan (All Categories)"
+      },
+      {
         "command": "caspian-security.fixIssue",
         "title": "Caspian Security: Show Fix Suggestion"
+      },
+      {
+        "command": "caspian-security.check-auth-access-control",
+        "title": "Caspian Security: Check Authentication & Access Control"
+      },
+      {
+        "command": "caspian-security.check-input-validation-xss",
+        "title": "Caspian Security: Check Input Validation & XSS"
+      },
+      {
+        "command": "caspian-security.check-csrf-protection",
+        "title": "Caspian Security: Check CSRF Protection"
+      },
+      {
+        "command": "caspian-security.check-cors-configuration",
+        "title": "Caspian Security: Check CORS Configuration"
+      },
+      {
+        "command": "caspian-security.check-encryption-data-protection",
+        "title": "Caspian Security: Check Encryption & Data Protection"
+      },
+      {
+        "command": "caspian-security.check-api-security",
+        "title": "Caspian Security: Check API Security"
+      },
+      {
+        "command": "caspian-security.check-database-security",
+        "title": "Caspian Security: Check Database Security"
+      },
+      {
+        "command": "caspian-security.check-file-handling",
+        "title": "Caspian Security: Check File Handling"
+      },
+      {
+        "command": "caspian-security.check-secrets-credentials",
+        "title": "Caspian Security: Check Secrets & Credentials"
+      },
+      {
+        "command": "caspian-security.check-frontend-security",
+        "title": "Caspian Security: Check Frontend Security"
+      },
+      {
+        "command": "caspian-security.check-business-logic-payment",
+        "title": "Caspian Security: Check Business Logic & Payment Security"
+      },
+      {
+        "command": "caspian-security.check-logging-monitoring",
+        "title": "Caspian Security: Check Logging & Monitoring"
       }
     ],
     "configuration": {
@@ -82,9 +134,73 @@
             "javascript",
             "typescript",
             "python",
-            "java"
+            "java",
+            "csharp",
+            "php",
+            "go",
+            "rust"
           ],
           "description": "Languages to check"
+        },
+        "caspianSecurity.enableAuthAccessControl": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Authentication & Access Control checks"
+        },
+        "caspianSecurity.enableInputValidationXss": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Input Validation & XSS checks"
+        },
+        "caspianSecurity.enableCsrfProtection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable CSRF Protection checks"
+        },
+        "caspianSecurity.enableCorsConfiguration": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable CORS Configuration checks"
+        },
+        "caspianSecurity.enableEncryptionDataProtection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Encryption & Data Protection checks"
+        },
+        "caspianSecurity.enableApiSecurity": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable API Security checks"
+        },
+        "caspianSecurity.enableDatabaseSecurity": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Database Security checks"
+        },
+        "caspianSecurity.enableFileHandling": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable File Handling checks"
+        },
+        "caspianSecurity.enableSecretsCredentials": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Secrets & Credentials checks"
+        },
+        "caspianSecurity.enableFrontendSecurity": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Frontend Security checks"
+        },
+        "caspianSecurity.enableBusinessLogicPayment": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Business Logic & Payment Security checks"
+        },
+        "caspianSecurity.enableLoggingMonitoring": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Logging & Monitoring checks"
         }
       }
     }
@@ -103,7 +219,5 @@
     "eslint": "^8.0.0",
     "typescript": "^5.0.0"
   },
-  "dependencies": {
-    "semver": "^7.5.0"
-  }
+  "dependencies": {}
 }
