@@ -7,7 +7,7 @@
   "type": "git",
   "url": "https://github.com/CaspianTools/caspian-security"
 },
-  "version": "1.0.3",
+  "version": "1.0.4",
   "publisher": "CaspianTools",
   "engines": {
     "vscode": "^1.85.0"
