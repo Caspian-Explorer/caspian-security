@@ -1,0 +1,105 @@
+{
+  "name": "caspian-security",
+  "displayName": "Caspian Security Extension",
+  "description": "Automatically runs security checks on your code, identifying vulnerabilities, unsafe practices, and security best practices",
+  "icon": "icon.png",
+  "version": "1.0.2",
+  "publisher": "CaspianTools",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters"
+  ],
+  "keywords": [
+    "security",
+    "vulnerability",
+    "linting",
+    "code-analysis",
+    "static-analysis"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:python",
+    "onLanguage:java",
+    "onLanguage:csharp",
+    "onLanguage:php",
+    "onLanguage:go",
+    "onLanguage:rust"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "caspian-security.runCheck",
+        "title": "Run Security Check"
+      },
+      {
+        "command": "caspian-security.runCheckFile",
+        "title": "Caspian Security: Check Current File"
+      },
+      {
+        "command": "caspian-security.runCheckWorkspace",
+        "title": "Caspian Security: Check Entire Workspace"
+      },
+      {
+        "command": "caspian-security.fixIssue",
+        "title": "Caspian Security: Show Fix Suggestion"
+      }
+    ],
+    "configuration": {
+      "title": "Caspian Security",
+      "properties": {
+        "caspianSecurity.autoCheck": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically run security checks as you type"
+        },
+        "caspianSecurity.checkOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run security checks when files are saved"
+        },
+        "caspianSecurity.severity": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "info"
+          ],
+          "default": "warning",
+          "description": "Minimum severity level to report"
+        },
+        "caspianSecurity.enabledLanguages": {
+          "type": "array",
+          "default": [
+            "javascript",
+            "typescript",
+            "python",
+            "java"
+          ],
+          "description": "Languages to check"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "semver": "^7.5.0"
+  }
+}
