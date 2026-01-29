@@ -295,7 +295,7 @@ async function runWorkspaceCheck() {
     return;
   }
 
-  const excludePattern = '**/node_modules/**';
+  const excludePattern = '{**/node_modules/**,**/out/**,**/dist/**,**/build/**,**/.git/**}';
   const files = await vscode.workspace.findFiles(globPattern, excludePattern);
 
   if (files.length === 0) {
