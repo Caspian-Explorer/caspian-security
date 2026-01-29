@@ -47,7 +47,19 @@ npm run watch
 
 This watches for TypeScript changes and recompiles automatically.
 
-### 5. Test the Extension
+### 5. Check Dependencies (Standalone)
+
+```bash
+npm run check-updates
+```
+
+This compiles the project and runs the dependency checker CLI tool, which reports outdated packages, known vulnerabilities, and stack version updates. It can also be run against another project directory:
+
+```bash
+node out/cli/checkUpdates.js /path/to/project
+```
+
+### 6. Test the Extension
 
 1. Open a file with supported language (JS, TS, Python, Java, etc.)
 2. Type some code that triggers a security rule (e.g., `password = "123"`)
@@ -58,17 +70,27 @@ This watches for TypeScript changes and recompiles automatically.
 ```
 security-checker-extension/
 ├── src/
-│   ├── extension.ts          # Main extension entry point
-│   ├── analyzer.ts           # Security rule definitions and pattern matching
-│   ├── diagnosticsManager.ts # Diagnostic display and management
-│   ├── configManager.ts      # Configuration handling
-│   └── types.ts              # TypeScript type definitions
-├── out/                      # Compiled JavaScript (generated)
-├── package.json              # Extension manifest and dependencies
-├── tsconfig.json            # TypeScript configuration
-├── .vscodeignore            # Files to exclude from package
-├── README.md                # User documentation
-└── BUILD.md                 # This file
+│   ├── extension.ts            # Main extension entry point
+│   ├── analyzer.ts             # Security rule definitions and pattern matching
+│   ├── diagnosticsManager.ts   # Diagnostic display and management
+│   ├── configManager.ts        # Configuration handling
+│   ├── dependencyChecker.ts    # Dependency & stack update checking (VS Code-independent)
+│   ├── resultsStore.ts         # Scan results storage and export
+│   ├── resultsPanel.ts         # Webview results panel
+│   ├── statusBarManager.ts     # Status bar integration
+│   ├── gitIntegration.ts       # Git SCM integration
+│   ├── types.ts                # TypeScript type definitions
+│   ├── rules/                  # Security rule definitions (14 category files)
+│   │   ├── index.ts            # Rule registry
+│   │   └── ...Rules.ts         # Per-category rule files
+│   └── cli/
+│       └── checkUpdates.ts     # Standalone CLI for dependency checking
+├── out/                        # Compiled JavaScript (generated)
+├── package.json                # Extension manifest and dependencies
+├── tsconfig.json               # TypeScript configuration
+├── .vscodeignore               # Files to exclude from package
+├── README.md                   # User documentation
+└── BUILD.md                    # This file
 ```
 
 ## Adding New Security Rules

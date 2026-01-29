@@ -120,6 +120,10 @@ export class ConfigManager {
     });
   }
 
+  getDependencyCheckEnabled(): boolean {
+    return this.config.get('includeDependencyCheck', true);
+  }
+
   resetToDefaults(): void {
     this.config.update('autoCheck', true, vscode.ConfigurationTarget.Global);
     this.config.update('checkOnSave', true, vscode.ConfigurationTarget.Global);
