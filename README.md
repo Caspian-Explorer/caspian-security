@@ -107,6 +107,7 @@ Open the Command Palette (`Ctrl+Shift+P`) and search for any of the following:
 | Caspian Security: Check Logging & Monitoring         | Scan for LOG rules only                      |
 | Caspian Security: Check Dependencies & Supply Chain  | Scan for DEP rules only                      |
 | Caspian Security: Check Infrastructure & Deployment  | Scan for INFRA rules only                    |
+| Caspian Security: Check Dependency & Stack Updates   | Check for outdated packages, vulnerabilities, and stack updates |
 
 ### Scan Modes
 
@@ -122,6 +123,9 @@ Run any command from the Command Palette to scan the current file or a specific 
 **Workspace Scan**
 Discovers all supported files in your project (excluding `node_modules`) and scans them with a progress indicator. The scan can be cancelled at any time.
 
+**Dependency Check**
+Checks for outdated npm packages, known vulnerabilities (`npm audit`), and stack component updates (Node.js, TypeScript, VS Code engine). Can be run standalone from the Command Palette or automatically as part of a workspace scan. Also available as a CLI tool via `npm run check-updates`.
+
 ---
 
 ## Configuration
@@ -136,6 +140,7 @@ Open VS Code Settings (`Ctrl+,`) and search for **"Caspian Security"** to config
 | `caspianSecurity.checkOnSave`       | boolean  | `true`    | Run checks when files are saved             |
 | `caspianSecurity.severity`          | string   | `warning` | Minimum severity level (`error`, `warning`, `info`) |
 | `caspianSecurity.enabledLanguages`  | array    | All 8     | Languages to include in security checks     |
+| `caspianSecurity.includeDependencyCheck` | boolean | `true` | Include dependency update and vulnerability checks during workspace scans |
 
 ### Category Toggles
 
@@ -406,11 +411,11 @@ Each rule has a **severity** (Error, Warning, or Info) and a **type**: code-dete
 
 ## Complementary Tools
 
-Caspian Security uses pattern-based static analysis. While it provides broad coverage of common vulnerabilities and best practices, it is not a replacement for professional security auditing. For comprehensive coverage, use it alongside:
+Caspian Security uses pattern-based static analysis and includes built-in dependency checking (`npm outdated`, `npm audit`, stack version checks). While it provides broad coverage of common vulnerabilities and best practices, it is not a replacement for professional security auditing. For comprehensive coverage, use it alongside:
 
 - **SAST tools** -- SonarQube, Snyk, Semgrep
 - **Dynamic security testing** -- OWASP ZAP, Burp Suite
-- **Dependency scanning** -- npm audit, Dependabot
+- **Dependency scanning** -- Dependabot, Snyk (Caspian's built-in dependency checker covers `npm audit` and `npm outdated`)
 - **Regular code reviews and security audits**
 
 ---

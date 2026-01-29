@@ -3,11 +3,12 @@ import * as path from 'path';
 import { SecurityAnalyzer } from './analyzer';
 import { DiagnosticsManager } from './diagnosticsManager';
 import { ConfigManager, LANGUAGE_EXTENSIONS } from './configManager';
-import { SecurityCategory, CATEGORY_LABELS } from './types';
+import { SecurityCategory, SecuritySeverity, CATEGORY_LABELS } from './types';
 import { ResultsStore } from './resultsStore';
 import { StatusBarManager, ScanState } from './statusBarManager';
 import { ResultsPanel } from './resultsPanel';
 import { GitIntegration } from './gitIntegration';
+import { checkDependencies, formatResultsAsText, DependencyCheckResult } from './dependencyChecker';
 
 const BATCH_SIZE = 50;
 
@@ -83,6 +84,7 @@ let resultsStore: ResultsStore;
 let statusBarManager: StatusBarManager;
 let resultsPanel: ResultsPanel;
 let gitIntegration: GitIntegration;
+let dependencyOutputChannel: vscode.OutputChannel;
 
 export function activate(context: vscode.ExtensionContext) {
   try {
@@ -95,6 +97,7 @@ export function activate(context: vscode.ExtensionContext) {
     statusBarManager = new StatusBarManager(resultsStore);
     resultsPanel = new ResultsPanel(context.extensionUri, resultsStore);
     gitIntegration = new GitIntegration();
+    dependencyOutputChannel = vscode.window.createOutputChannel('Caspian Security: Dependencies');
 
     context.subscriptions.push(configManager);
     context.subscriptions.push(diagnosticsManager);
@@ -102,6 +105,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(statusBarManager);
     context.subscriptions.push(resultsPanel);
     context.subscriptions.push(gitIntegration);
+    context.subscriptions.push(dependencyOutputChannel);
 
     // Initialize git integration (non-blocking)
     gitIntegration.initialize();
@@ -219,6 +223,13 @@ function registerCommands(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('caspian-security.runCheckUncommitted', async () => {
       await runUncommittedCheck();
+    })
+  );
+
+  // New command: Check Dependency & Stack Updates
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.checkDependencyUpdates', async () => {
+      await runDependencyCheck();
     })
   );
 }
@@ -482,6 +493,19 @@ async function runWorkspaceCheck() {
     }
   }
 
+  // Run dependency check if enabled
+  if (configManager.getDependencyCheckEnabled() &&
+      configManager.getEnabledCategories().includes(SecurityCategory.DependenciesSupplyChain)) {
+    try {
+      const depResult = await runDependencyCheck();
+      if (depResult) {
+        totalIssueCount += depResult.outdatedPackages.length + depResult.auditSummary.totalVulnerabilities;
+      }
+    } catch (error) {
+      console.error('Caspian Security: Dependency check failed during workspace scan:', error);
+    }
+  }
+
   const duration = Date.now() - startTime;
   resultsStore.setScanMeta(duration, userStopped ? 'workspace (partial)' : 'workspace');
   statusBarManager.showComplete();
@@ -578,6 +602,111 @@ async function runUncommittedCheck() {
 
   // Auto-open results panel after scan
   resultsPanel.show();
+}
+
+async function runDependencyCheck(): Promise<DependencyCheckResult | undefined> {
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!workspaceRoot) {
+    vscode.window.showWarningMessage('Caspian Security: No workspace folder open');
+    return undefined;
+  }
+
+  const fs = await import('fs');
+  const packageJsonPath = path.join(workspaceRoot, 'package.json');
+  if (!fs.existsSync(packageJsonPath)) {
+    vscode.window.showWarningMessage('Caspian Security: No package.json found in workspace root');
+    return undefined;
+  }
+
+  let result: DependencyCheckResult | undefined;
+
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: 'Caspian Security: Checking dependency updates...',
+      cancellable: false,
+    },
+    async () => {
+      result = await checkDependencies(workspaceRoot);
+    }
+  );
+
+  if (result) {
+    const output = formatResultsAsText(result);
+    dependencyOutputChannel.clear();
+    dependencyOutputChannel.appendLine('Caspian Security: Dependency & Stack Update Check');
+    dependencyOutputChannel.appendLine(`Project: ${workspaceRoot}`);
+    dependencyOutputChannel.appendLine('='.repeat(50));
+    dependencyOutputChannel.appendLine('');
+    dependencyOutputChannel.appendLine(output);
+    dependencyOutputChannel.show(true);
+
+    const outdatedCount = result.outdatedPackages.length;
+    const vulnCount = result.auditSummary.totalVulnerabilities;
+    vscode.window.showInformationMessage(
+      `Caspian Security: ${outdatedCount} outdated package(s), ${vulnCount} vulnerability(ies) found. See Output panel.`
+    );
+
+    storeDependencyResultsAsIssues(result, workspaceRoot);
+  }
+
+  return result;
+}
+
+function storeDependencyResultsAsIssues(result: DependencyCheckResult, workspaceRoot: string): void {
+  const issues: import('./types').SecurityIssue[] = [];
+
+  for (const vuln of result.auditSummary.vulnerabilities) {
+    issues.push({
+      line: 0,
+      column: 0,
+      message: `Vulnerability in ${vuln.name}: ${vuln.title} (${vuln.severity})`,
+      severity: mapAuditSeverity(vuln.severity),
+      suggestion: vuln.fixAvailable
+        ? `Fix available. Run npm audit fix or update ${vuln.name}. ${vuln.url ? 'Details: ' + vuln.url : ''}`
+        : `No automatic fix available. ${vuln.url ? 'Review: ' + vuln.url : ''}`,
+      code: 'DEP-AUDIT',
+      pattern: vuln.name,
+      category: SecurityCategory.DependenciesSupplyChain,
+    });
+  }
+
+  for (const pkg of result.outdatedPackages) {
+    issues.push({
+      line: 0,
+      column: 0,
+      message: `${pkg.name} is outdated: ${pkg.current} -> ${pkg.latest} (${pkg.updateType} update)`,
+      severity: pkg.updateType === 'major' ? SecuritySeverity.Warning : SecuritySeverity.Info,
+      suggestion: `Update ${pkg.name} to ${pkg.latest}: npm install ${pkg.name}@${pkg.latest}`,
+      code: 'DEP-OUTDATED',
+      pattern: pkg.name,
+      category: SecurityCategory.DependenciesSupplyChain,
+    });
+  }
+
+  if (issues.length > 0) {
+    const packageJsonPath = path.join(workspaceRoot, 'package.json');
+    resultsStore.setFileResults(`dependency-check:${packageJsonPath}`, {
+      filePath: packageJsonPath,
+      relativePath: 'package.json',
+      languageId: 'json',
+      issues,
+      scannedAt: new Date(),
+    });
+    updateHasResultsContext();
+  }
+}
+
+function mapAuditSeverity(severity: string): import('./types').SecuritySeverity {
+  switch (severity) {
+    case 'critical':
+    case 'high':
+      return SecuritySeverity.Error;
+    case 'moderate':
+      return SecuritySeverity.Warning;
+    default:
+      return SecuritySeverity.Info;
+  }
 }
 
 function updateHasResultsContext() {

@@ -4,6 +4,21 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [4.3.0] - 2026-01-29
+
+### Added
+
+- Dependency & stack update checker -- runs `npm outdated`, `npm audit`, and checks Node.js, TypeScript, and VS Code engine versions against latest releases
+- New command: "Caspian Security: Check Dependency & Stack Updates" for on-demand dependency checking from the Command Palette
+- Standalone CLI tool: `npm run check-updates` runs the dependency checker from the terminal without VS Code
+- Dependency checks automatically included in workspace scans when the Dependencies & Supply Chain category is enabled
+- New setting: `caspianSecurity.includeDependencyCheck` (default: true) to control whether workspace scans include dependency checking
+- Dedicated "Caspian Security: Dependencies" Output Channel for detailed update and vulnerability reports
+- Audit vulnerabilities and outdated packages surfaced as SecurityIssues in the Results Panel under the Dependencies & Supply Chain category
+- New files: `src/dependencyChecker.ts` (core logic) and `src/cli/checkUpdates.ts` (standalone CLI entry point)
+
+---
+
 ## [4.2.0] - 2026-01-29
 
 ### Added
