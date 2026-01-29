@@ -67,7 +67,7 @@ Designed for development teams that want continuous security feedback without le
 
 ### From VSIX File
 
-1. Download the `.vsix` file from the [Releases](https://github.com/CaspianTools/caspian-security/releases) page
+1. Download the `.vsix` file from the [Releases](https://github.com/Caspian-Explorer/caspian-security/releases) page
 2. Open VS Code
 3. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac)
 4. Search for **"Extensions: Install from VSIX"**
@@ -417,7 +417,7 @@ Caspian Security uses pattern-based static analysis. While it provides broad cov
 
 ## Contributing
 
-Found a bug or have a suggestion? Please open an issue on [GitHub](https://github.com/CaspianTools/caspian-security/issues).
+Found a bug or have a suggestion? Please open an issue on [GitHub](https://github.com/Caspian-Explorer/caspian-security/issues).
 
 ---
 
