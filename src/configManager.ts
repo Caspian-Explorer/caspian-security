@@ -14,6 +14,8 @@ const CATEGORY_SETTING_KEYS: Record<SecurityCategory, string> = {
   [SecurityCategory.FrontendSecurity]: 'enableFrontendSecurity',
   [SecurityCategory.BusinessLogicPayment]: 'enableBusinessLogicPayment',
   [SecurityCategory.LoggingMonitoring]: 'enableLoggingMonitoring',
+  [SecurityCategory.DependenciesSupplyChain]: 'enableDependenciesSupplyChain',
+  [SecurityCategory.InfrastructureDeployment]: 'enableInfrastructureDeployment',
 };
 
 const LANGUAGE_EXTENSIONS: Record<string, string[]> = {

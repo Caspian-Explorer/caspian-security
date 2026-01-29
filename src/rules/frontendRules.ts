@@ -93,4 +93,18 @@ export const frontendRules: SecurityRule[] = [
     category: SecurityCategory.FrontendSecurity,
     ruleType: RuleType.Informational,
   },
+  {
+    code: 'FE009',
+    message: 'Reminder: Client-side validation is for UX only — server-side validation is required for security',
+    severity: SecuritySeverity.Info,
+    patterns: [
+      /checkValidity\s*\(/,
+      /setCustomValidity\s*\(/,
+      /\.validity\./,
+      /reportValidity\s*\(/,
+    ],
+    suggestion: 'Client-side validation improves user experience but can be bypassed. Always validate and sanitize all inputs on the server side as the authoritative security boundary',
+    category: SecurityCategory.FrontendSecurity,
+    ruleType: RuleType.Informational,
+  },
 ];
