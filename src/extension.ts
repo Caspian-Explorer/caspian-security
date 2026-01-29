@@ -9,13 +9,15 @@ import { StatusBarManager, ScanState } from './statusBarManager';
 import { ResultsPanel } from './resultsPanel';
 import { GitIntegration } from './gitIntegration';
 
-interface LanguageBatch {
+const BATCH_SIZE = 50;
+
+interface ScanBatch {
+  label: string;
   language: string;
-  displayName: string;
   files: vscode.Uri[];
 }
 
-function groupFilesByLanguage(files: vscode.Uri[]): LanguageBatch[] {
+function createScanBatches(files: vscode.Uri[]): ScanBatch[] {
   const extToLang: Record<string, string> = {};
   for (const [lang, exts] of Object.entries(LANGUAGE_EXTENSIONS)) {
     for (const ext of exts) { extToLang[ext] = lang; }
@@ -30,13 +32,48 @@ function groupFilesByLanguage(files: vscode.Uri[]): LanguageBatch[] {
     groups.get(language)!.push(file);
   }
 
-  return Array.from(groups.entries())
-    .map(([language, langFiles]) => ({
-      language,
-      displayName: language.charAt(0).toUpperCase() + language.slice(1),
-      files: langFiles,
-    }))
-    .sort((a, b) => b.files.length - a.files.length);
+  // Sort language groups by file count descending
+  const sortedGroups = Array.from(groups.entries())
+    .sort((a, b) => b[1].length - a[1].length);
+
+  const batches: ScanBatch[] = [];
+  for (const [language, langFiles] of sortedGroups) {
+    const displayName = language.charAt(0).toUpperCase() + language.slice(1);
+    if (langFiles.length <= BATCH_SIZE) {
+      batches.push({ label: displayName, language, files: langFiles });
+    } else {
+      const totalChunks = Math.ceil(langFiles.length / BATCH_SIZE);
+      for (let c = 0; c < totalChunks; c++) {
+        const chunk = langFiles.slice(c * BATCH_SIZE, (c + 1) * BATCH_SIZE);
+        batches.push({
+          label: `${displayName} (${c + 1}/${totalChunks})`,
+          language,
+          files: chunk,
+        });
+      }
+    }
+  }
+
+  return batches;
+}
+
+function buildScanEstimate(files: vscode.Uri[], batches: ScanBatch[]): string {
+  // Aggregate file counts per language
+  const langCounts = new Map<string, { files: number; batches: number }>();
+  for (const batch of batches) {
+    const entry = langCounts.get(batch.language) || { files: 0, batches: 0 };
+    entry.files += batch.files.length;
+    entry.batches += 1;
+    langCounts.set(batch.language, entry);
+  }
+
+  const parts: string[] = [];
+  for (const [lang, info] of langCounts) {
+    const name = lang.charAt(0).toUpperCase() + lang.slice(1);
+    parts.push(`${name}: ${info.files}`);
+  }
+
+  return `Found ${files.length} files in ${batches.length} batch(es). ${parts.join(', ')}`;
 }
 
 let analyzer: SecurityAnalyzer;
@@ -334,9 +371,20 @@ async function runWorkspaceCheck() {
     return;
   }
 
-  const batches = groupFilesByLanguage(files);
+  const batches = createScanBatches(files);
   if (batches.length === 0) {
     vscode.window.showInformationMessage('No supported files found in workspace');
+    return;
+  }
+
+  // Show pre-scan estimate and ask for confirmation
+  const estimate = buildScanEstimate(files, batches);
+  const startChoice = await vscode.window.showInformationMessage(
+    `Caspian Security: ${estimate}`,
+    'Start Scan',
+    'Cancel'
+  );
+  if (startChoice !== 'Start Scan') {
     return;
   }
 
@@ -358,7 +406,7 @@ async function runWorkspaceCheck() {
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: `Caspian Security: Scanning ${batch.displayName} files (batch ${batchIndex + 1}/${batches.length})`,
+        title: `Caspian Security: Scanning ${batch.label} (batch ${batchIndex + 1}/${batches.length})`,
         cancellable: true,
       },
       async (progress, token) => {
@@ -420,9 +468,9 @@ async function runWorkspaceCheck() {
       const remainingFiles = batches.slice(batchIndex + 1).reduce((sum, b) => sum + b.files.length, 0);
 
       const choice = await vscode.window.showInformationMessage(
-        `Caspian Security: ${batch.displayName} batch complete — ${batchIssueCount} issue(s) in ${batchFilesScanned} files. `
-        + `${remainingBatches} batch(es) remaining (${remainingFiles} files). `
-        + `Next: ${nextBatch.displayName} (${nextBatch.files.length} files)`,
+        `Caspian Security: ${batch.label} done — ${batchIssueCount} issue(s) in ${batchFilesScanned} files. `
+        + `Next: ${nextBatch.label} (${nextBatch.files.length} files). `
+        + `${remainingBatches} batch(es) remaining (${remainingFiles} files).`,
         'Continue',
         'Stop'
       );
