@@ -4,6 +4,21 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [4.2.0] - 2026-01-29
+
+### Added
+
+- Pre-scan estimate with confirmation -- workspace scans now show file counts by language and total batches before scanning, with Start Scan/Cancel buttons
+- Smart batch scanning -- files are grouped by language and split into batches of 50, with Continue/Stop prompts between each batch showing progress and what's next
+- `.next/` directory excluded from workspace scans (Next.js build output)
+
+### Fixed
+
+- VS Code freezing during large workspace scans -- added event loop yielding every 10 files to keep the UI responsive
+- Excessive UI updates during scanning -- debounced results store change events (300ms) to prevent thousands of webview re-renders
+
+---
+
 ## [3.0.0] - 2025-01-29
 
 ### Added
