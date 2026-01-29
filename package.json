@@ -8,7 +8,7 @@
     "url": "https://github.com/Caspian-Explorer/caspian-security"
   },
   "version": "4.0.0",
-  "publisher": "Caspian-Explorer",
+  "publisher": "CaspianTools",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
