@@ -142,7 +142,7 @@ code --install-extension caspian-security-1.0.0.vsix
 2. Create Personal Access Token
 3. Configure vsce:
    ```bash
-   vsce login CaspianTools
+   vsce login Caspian-Explorer
    ```
 4. Publish:
    ```bash

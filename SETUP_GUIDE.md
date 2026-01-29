@@ -82,7 +82,7 @@ vsce package
 ### Option B: Publish to Marketplace
 ```bash
 # First, create Azure DevOps account and Personal Access Token
-vsce login CaspianTools
+vsce login Caspian-Explorer
 vsce publish
 ```
 
