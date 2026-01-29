@@ -16,6 +16,17 @@ const CATEGORY_SETTING_KEYS: Record<SecurityCategory, string> = {
   [SecurityCategory.LoggingMonitoring]: 'enableLoggingMonitoring',
 };
 
+const LANGUAGE_EXTENSIONS: Record<string, string[]> = {
+  javascript: ['js', 'jsx', 'mjs', 'cjs'],
+  typescript: ['ts', 'tsx', 'mts', 'cts'],
+  python: ['py'],
+  java: ['java'],
+  csharp: ['cs'],
+  php: ['php'],
+  go: ['go'],
+  rust: ['rs'],
+};
+
 export class ConfigManager {
   private config: vscode.WorkspaceConfiguration;
   private configChangeDisposable: vscode.Disposable;
@@ -90,6 +101,14 @@ export class ConfigManager {
   removeLanguage(languageId: string): void {
     const languages = this.getEnabledLanguages().filter(lang => lang !== languageId);
     this.setEnabledLanguages(languages);
+  }
+
+  getFileGlobPattern(): string {
+    const languages = this.getEnabledLanguages();
+    const extensions = languages.flatMap(lang => LANGUAGE_EXTENSIONS[lang] || []);
+    if (extensions.length === 0) { return ''; }
+    if (extensions.length === 1) { return `**/*.${extensions[0]}`; }
+    return `**/*.{${extensions.join(',')}}`;
   }
 
   getEnabledCategories(): SecurityCategory[] {
