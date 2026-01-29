@@ -98,4 +98,17 @@ export const secretsRules: SecurityRule[] = [
     category: SecurityCategory.SecretsCredentials,
     ruleType: RuleType.Informational,
   },
+  {
+    code: 'CRED009',
+    message: 'Reminder: Scan git history for leaked secrets and remove them',
+    severity: SecuritySeverity.Info,
+    patterns: [
+      /\.gitignore/,
+      /git\s+(?:commit|push|add)/i,
+      /\.git\//,
+    ],
+    suggestion: 'Use tools like git-secrets, truffleHog, or gitleaks to scan commit history for accidentally committed secrets. If found, rotate the secret immediately and use git filter-branch or BFG Repo-Cleaner to purge from history',
+    category: SecurityCategory.SecretsCredentials,
+    ruleType: RuleType.Informational,
+  },
 ];

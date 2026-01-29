@@ -1,7 +1,7 @@
 {
   "name": "caspian-security",
   "displayName": "Caspian Security Extension",
-  "description": "Real-time security analysis for VS Code — 117 rules across 12 categories detecting vulnerabilities, insecure patterns, and security best practice violations",
+  "description": "Real-time security analysis for VS Code — 133 rules across 14 categories detecting vulnerabilities, insecure patterns, and security best practice violations",
   "icon": "icon.png",
   "repository": {
     "type": "git",
@@ -112,6 +112,14 @@
       {
         "command": "caspian-security.check-logging-monitoring",
         "title": "Caspian Security: Check Logging & Monitoring"
+      },
+      {
+        "command": "caspian-security.check-dependencies-supply-chain",
+        "title": "Caspian Security: Check Dependencies & Supply Chain"
+      },
+      {
+        "command": "caspian-security.check-infrastructure-deployment",
+        "title": "Caspian Security: Check Infrastructure & Deployment"
       }
     ],
     "configuration": {
@@ -210,6 +218,16 @@
           "type": "boolean",
           "default": true,
           "description": "Enable Logging & Monitoring checks"
+        },
+        "caspianSecurity.enableDependenciesSupplyChain": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Dependencies & Supply Chain checks"
+        },
+        "caspianSecurity.enableInfrastructureDeployment": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Infrastructure & Deployment checks"
         }
       }
     }

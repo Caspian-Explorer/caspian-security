@@ -6,7 +6,7 @@ Real-time static security analysis for Visual Studio Code.
 
 ## Overview
 
-Caspian Security is a VS Code extension that automatically detects vulnerabilities, insecure coding patterns, and security best practice violations as you write code. It provides **117 security rules** organized across **12 categories**, covering everything from SQL injection and XSS to business logic flaws and logging hygiene.
+Caspian Security is a VS Code extension that automatically detects vulnerabilities, insecure coding patterns, and security best practice violations as you write code. It provides **133 security rules** organized across **14 categories**, covering everything from SQL injection and XSS to business logic flaws and logging hygiene.
 
 Designed for development teams that want continuous security feedback without leaving the editor.
 
@@ -16,7 +16,7 @@ Designed for development teams that want continuous security feedback without le
 
 - **Real-time analysis** -- checks code as you type with a 1-second debounce to avoid lag
 - **Full workspace scanning** -- scans all project files on disk, not just open tabs
-- **117 security rules** across 12 categories with actionable fix suggestions
+- **133 security rules** across 14 categories with actionable fix suggestions
 - **8 languages supported** -- JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust
 - **Per-category toggles** -- enable or disable each security category independently
 - **Cancellable scans** -- workspace scans show progress and can be cancelled mid-run
@@ -52,12 +52,14 @@ Designed for development teams that want continuous security feedback without le
 | API Security                      | 14    | API001--API014   | Auth middleware, IDOR, rate limiting, GraphQL, error exposure  |
 | Database Security                 | 12    | DB001--DB012     | SQL injection, NoSQL injection, least privilege, default creds |
 | File Handling                     | 14    | FILE001--FILE014 | Path traversal, upload validation, cloud storage, magic bytes  |
-| Secrets & Credentials             | 8     | CRED001--CRED008 | Hardcoded passwords, AWS keys, private keys, GitHub tokens     |
-| Frontend Security                 | 8     | FE001--FE008     | eval(), postMessage, iframe sandbox, prototype pollution       |
+| Secrets & Credentials             | 9     | CRED001--CRED009 | Hardcoded passwords, AWS keys, private keys, GitHub tokens     |
+| Frontend Security                 | 9     | FE001--FE009     | eval(), postMessage, iframe sandbox, prototype pollution       |
 | Business Logic & Payment Security | 9     | BIZ001--BIZ009   | Premium checks, payment verification, refunds, quotas          |
 | Logging & Monitoring              | 9     | LOG001--LOG009   | Auth logging, sensitive data in logs, log encryption           |
+| Dependencies & Supply Chain       | 6     | DEP001--DEP006   | Version pinning, patching SLA, auditing, transitive deps       |
+| Infrastructure & Deployment       | 8     | INFRA001--INFRA008 | Env separation, debug mode, Docker secrets, source maps      |
 
-**Total: 117 rules** (67 code-detectable + 50 informational)
+**Total: 133 rules** (74 code-detectable + 59 informational)
 
 ---
 
@@ -103,6 +105,8 @@ Open the Command Palette (`Ctrl+Shift+P`) and search for any of the following:
 | Caspian Security: Check Frontend Security            | Scan for FE rules only                       |
 | Caspian Security: Check Business Logic & Payment     | Scan for BIZ rules only                      |
 | Caspian Security: Check Logging & Monitoring         | Scan for LOG rules only                      |
+| Caspian Security: Check Dependencies & Supply Chain  | Scan for DEP rules only                      |
+| Caspian Security: Check Infrastructure & Deployment  | Scan for INFRA rules only                    |
 
 ### Scan Modes
 
@@ -151,6 +155,8 @@ Each security category can be independently enabled or disabled:
 | `caspianSecurity.enableFrontendSecurity`         | `true`  | Frontend Security                 |
 | `caspianSecurity.enableBusinessLogicPayment`     | `true`  | Business Logic & Payment Security |
 | `caspianSecurity.enableLoggingMonitoring`        | `true`  | Logging & Monitoring              |
+| `caspianSecurity.enableDependenciesSupplyChain`  | `true`  | Dependencies & Supply Chain       |
+| `caspianSecurity.enableInfrastructureDeployment` | `true`  | Infrastructure & Deployment       |
 
 ### Example Configuration
 
@@ -294,7 +300,7 @@ Each rule has a **severity** (Error, Warning, or Info) and a **type**: code-dete
 | FILE013  | Enable access logs for file storage                | Info     | Info |
 | FILE014  | File type validated by extension only, not magic bytes | Warning | Code |
 
-### Secrets & Credentials (8 rules)
+### Secrets & Credentials (9 rules)
 
 | Code     | Rule                                              | Severity | Type |
 |----------|---------------------------------------------------|----------|------|
@@ -306,8 +312,9 @@ Each rule has a **severity** (Error, Warning, or Info) and a **type**: code-dete
 | CRED006  | Environment variable with sensitive default fallback | Warning | Code |
 | CRED007  | Sensitive file reference -- ensure it is in .gitignore | Warning | Info |
 | CRED008  | Rotate secrets regularly and audit access          | Info     | Info |
+| CRED009  | Scan git history for leaked secrets                | Info     | Info |
 
-### Frontend Security (8 rules)
+### Frontend Security (9 rules)
 
 | Code   | Rule                                              | Severity | Type |
 |--------|---------------------------------------------------|----------|------|
@@ -319,6 +326,7 @@ Each rule has a **severity** (Error, Warning, or Info) and a **type**: code-dete
 | FE006  | Sensitive data stored via document.cookie           | Warning  | Code |
 | FE007  | Prototype pollution: unsafe __proto__ or constructor | Warning | Code |
 | FE008  | Add Subresource Integrity for CDN resources        | Info     | Info |
+| FE009  | Client-side validation is for UX only; server-side required | Info | Info |
 
 ### Business Logic & Payment Security (9 rules)
 
@@ -347,6 +355,30 @@ Each rule has a **severity** (Error, Warning, or Info) and a **type**: code-dete
 | LOG007 | Store logs securely with encryption                | Info     | Info |
 | LOG008 | Restrict log access to admin/security personnel    | Info     | Info |
 | LOG009 | Log data export and API key change operations      | Info     | Info |
+
+### Dependencies & Supply Chain (6 rules)
+
+| Code   | Rule                                              | Severity | Type |
+|--------|---------------------------------------------------|----------|------|
+| DEP001 | Dependency version is not pinned to an exact version | Warning | Code |
+| DEP002 | Keep dependencies updated regularly                | Info     | Info |
+| DEP003 | Apply security patches within 48 hours             | Info     | Info |
+| DEP004 | Run npm audit / pip-audit weekly                   | Info     | Info |
+| DEP005 | Identify and remediate known vulnerable dependencies | Info   | Info |
+| DEP006 | Monitor transitive dependencies for vulnerabilities | Info    | Info |
+
+### Infrastructure & Deployment (8 rules)
+
+| Code     | Rule                                              | Severity | Type |
+|----------|---------------------------------------------------|----------|------|
+| INFRA001 | Use separate databases, keys, and configs for dev and production | Info | Info |
+| INFRA002 | Debug mode may be enabled in production configuration | Warning | Code |
+| INFRA003 | Verbose or debug logging level may be active in production | Warning | Code |
+| INFRA004 | Stack traces may be exposed in production configuration | Warning | Code |
+| INFRA005 | Secret may be embedded in Docker image via ENV, ARG, or COPY | Error | Code |
+| INFRA006 | Ensure secrets are not printed in build or CI logs | Warning | Info |
+| INFRA007 | Source maps may be deployed to production          | Warning  | Code |
+| INFRA008 | Test, seed, or mock data may be present in production code | Warning | Code |
 
 ---
 

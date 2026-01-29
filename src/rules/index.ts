@@ -11,6 +11,8 @@ import { secretsRules } from './secretsRules';
 import { frontendRules } from './frontendRules';
 import { businessLogicRules } from './businessLogicRules';
 import { loggingRules } from './loggingRules';
+import { dependenciesRules } from './dependenciesRules';
+import { infrastructureRules } from './infrastructureRules';
 
 const allRulesByCategory: Record<SecurityCategory, SecurityRule[]> = {
   [SecurityCategory.AuthAccessControl]: authRules,
@@ -25,6 +27,8 @@ const allRulesByCategory: Record<SecurityCategory, SecurityRule[]> = {
   [SecurityCategory.FrontendSecurity]: frontendRules,
   [SecurityCategory.BusinessLogicPayment]: businessLogicRules,
   [SecurityCategory.LoggingMonitoring]: loggingRules,
+  [SecurityCategory.DependenciesSupplyChain]: dependenciesRules,
+  [SecurityCategory.InfrastructureDeployment]: infrastructureRules,
 };
 
 export function getAllRules(): SecurityRule[] {

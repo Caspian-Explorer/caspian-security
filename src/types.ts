@@ -17,6 +17,8 @@ export enum SecurityCategory {
   FrontendSecurity = 'frontend-security',
   BusinessLogicPayment = 'business-logic-payment',
   LoggingMonitoring = 'logging-monitoring',
+  DependenciesSupplyChain = 'dependencies-supply-chain',
+  InfrastructureDeployment = 'infrastructure-deployment',
 }
 
 export enum RuleType {
@@ -58,4 +60,6 @@ export const CATEGORY_LABELS: Record<SecurityCategory, string> = {
   [SecurityCategory.FrontendSecurity]: 'Frontend Security',
   [SecurityCategory.BusinessLogicPayment]: 'Business Logic & Payment Security',
   [SecurityCategory.LoggingMonitoring]: 'Logging & Monitoring',
+  [SecurityCategory.DependenciesSupplyChain]: 'Dependencies & Supply Chain',
+  [SecurityCategory.InfrastructureDeployment]: 'Infrastructure & Deployment',
 };
