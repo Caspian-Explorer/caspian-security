@@ -1,336 +1,394 @@
-# Caspian Security Extension - VS Code
+# Caspian Security
 
-A comprehensive security analysis tool for VS Code that automatically detects vulnerabilities, insecure coding patterns, and security best practice violations in your code.
+Real-time static security analysis for Visual Studio Code.
 
-## Features
+---
 
-✅ **Automatic Real-time Analysis** - Checks code as you type with configurable debouncing
-✅ **Multi-Language Support** - Analyzes JavaScript, TypeScript, Python, Java, C#, PHP, Go, and Rust
-✅ **16 Built-in Security Rules** - Detects:
-   - SQL Injection vulnerabilities
-   - Hardcoded credentials
-   - Weak cryptographic functions
-   - Unsafe eval() usage
-   - Path traversal vulnerabilities
-   - Missing CSRF protection
-   - Unsafe deserialization
-   - Missing input validation
-   - Missing authentication checks
-   - XXE vulnerabilities
-   - Insecure HTTP usage
-   - Missing security headers
-   - Sensitive data logging
-   - Missing rate limiting
-   - Command injection
-   - Weak random number generation
+## Overview
 
-✅ **Actionable Suggestions** - Each issue includes a detailed fix suggestion
-✅ **Configurable Severity Levels** - Filter by error, warning, or info
-✅ **Workspace-wide Scanning** - Check entire projects with one command
-✅ **Smart Debouncing** - Configurable auto-check with 1-second debounce to avoid lag
+Caspian Security is a VS Code extension that automatically detects vulnerabilities, insecure coding patterns, and security best practice violations as you write code. It provides **117 security rules** organized across **12 categories**, covering everything from SQL injection and XSS to business logic flaws and logging hygiene.
+
+Designed for development teams that want continuous security feedback without leaving the editor.
+
+---
+
+## Key Capabilities
+
+- **Real-time analysis** -- checks code as you type with a 1-second debounce to avoid lag
+- **Full workspace scanning** -- scans all project files on disk, not just open tabs
+- **117 security rules** across 12 categories with actionable fix suggestions
+- **8 languages supported** -- JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust
+- **Per-category toggles** -- enable or disable each security category independently
+- **Cancellable scans** -- workspace scans show progress and can be cancelled mid-run
+- **Configurable severity** -- filter diagnostics by error, warning, or info thresholds
+- **Two rule types** -- code-detectable rules (regex pattern matching) and informational rules (process and policy reminders)
+
+---
+
+## Supported Languages
+
+| Language   | File Extensions              |
+|------------|------------------------------|
+| JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs`|
+| TypeScript | `.ts`, `.tsx`, `.mts`, `.cts`|
+| Python     | `.py`                        |
+| Java       | `.java`                      |
+| C#         | `.cs`                        |
+| PHP        | `.php`                       |
+| Go         | `.go`                        |
+| Rust       | `.rs`                        |
+
+---
+
+## Security Categories
+
+| Category                          | Rules | Codes            | Covers                                                        |
+|-----------------------------------|-------|------------------|---------------------------------------------------------------|
+| Authentication & Access Control   | 7     | AUTH001--AUTH007  | JWT secrets, session flags, password comparison, rate limiting |
+| Input Validation & XSS            | 11    | XSS001--XSS011   | innerHTML, document.write, template injection, CSP            |
+| CSRF Protection                   | 7     | CSRF001--CSRF007 | Token validation, SameSite cookies, GET state changes          |
+| CORS Configuration                | 6     | CORS001--CORS006 | Wildcard origins, reflected origins, preflight caching         |
+| Encryption & Data Protection      | 12    | ENC001--ENC012   | Weak crypto, hardcoded keys, HSTS, PII masking, GDPR          |
+| API Security                      | 14    | API001--API014   | Auth middleware, IDOR, rate limiting, GraphQL, error exposure  |
+| Database Security                 | 12    | DB001--DB012     | SQL injection, NoSQL injection, least privilege, default creds |
+| File Handling                     | 14    | FILE001--FILE014 | Path traversal, upload validation, cloud storage, magic bytes  |
+| Secrets & Credentials             | 8     | CRED001--CRED008 | Hardcoded passwords, AWS keys, private keys, GitHub tokens     |
+| Frontend Security                 | 8     | FE001--FE008     | eval(), postMessage, iframe sandbox, prototype pollution       |
+| Business Logic & Payment Security | 9     | BIZ001--BIZ009   | Premium checks, payment verification, refunds, quotas          |
+| Logging & Monitoring              | 9     | LOG001--LOG009   | Auth logging, sensitive data in logs, log encryption           |
+
+**Total: 117 rules** (67 code-detectable + 50 informational)
+
+---
 
 ## Installation
 
 ### From VSIX File
-1. Download the `security-checker.vsix` file
+
+1. Download the `.vsix` file from the [Releases](https://github.com/CaspianTools/caspian-security/releases) page
 2. Open VS Code
 3. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac)
-4. Search for "Extensions: Install from VSIX"
+4. Search for **"Extensions: Install from VSIX"**
 5. Select the downloaded file
 
 ### From VS Code Marketplace
-(When published)
+
 1. Open the Extensions view (`Ctrl+Shift+X`)
-2. Search for "Security Checker"
-3. Click Install
+2. Search for **"Caspian Security"**
+3. Click **Install**
+
+---
 
 ## Usage
 
 ### Commands
 
-**Run Security Check on Current File**
-- Press `Ctrl+Shift+P` and search for "Caspian Security: Check Current File"
-- Or click the Caspian Security icon in the activity bar
+Open the Command Palette (`Ctrl+Shift+P`) and search for any of the following:
 
-**Run Security Check on Entire Workspace**
-- Press `Ctrl+Shift+P` and search for "Caspian Security: Check Entire Workspace"
+| Command                                              | Description                                   |
+|------------------------------------------------------|-----------------------------------------------|
+| Caspian Security: Check Current File                 | Scan the active file                          |
+| Caspian Security: Check Entire Workspace             | Scan all supported files in the project       |
+| Caspian Security: Run Full Security Scan             | Scan all categories (file or workspace)       |
+| Caspian Security: Show Fix Suggestion                | Display the fix suggestion for a diagnostic   |
+| Caspian Security: Check Authentication & Access Control | Scan for AUTH rules only                   |
+| Caspian Security: Check Input Validation & XSS       | Scan for XSS rules only                      |
+| Caspian Security: Check CSRF Protection              | Scan for CSRF rules only                     |
+| Caspian Security: Check CORS Configuration           | Scan for CORS rules only                     |
+| Caspian Security: Check Encryption & Data Protection | Scan for ENC rules only                      |
+| Caspian Security: Check API Security                 | Scan for API rules only                      |
+| Caspian Security: Check Database Security            | Scan for DB rules only                       |
+| Caspian Security: Check File Handling                | Scan for FILE rules only                     |
+| Caspian Security: Check Secrets & Credentials        | Scan for CRED rules only                     |
+| Caspian Security: Check Frontend Security            | Scan for FE rules only                       |
+| Caspian Security: Check Business Logic & Payment     | Scan for BIZ rules only                      |
+| Caspian Security: Check Logging & Monitoring         | Scan for LOG rules only                      |
 
-**Auto Check** (Default: Enabled)
-- Automatically runs checks as you type
-- Results appear in real-time with red/yellow squiggles
+### Scan Modes
 
-**Check on Save** (Default: Enabled)
-- Automatically runs a full check when you save files
+**Auto Check** (enabled by default)
+Runs security analysis as you type. Results appear in real-time as diagnostic squiggles in the editor. Uses a 1-second debounce to minimize CPU usage.
 
-### Configuration
+**Check on Save** (enabled by default)
+Runs a full check whenever a file is saved.
 
-Open VS Code settings and search for "Caspian Security" to configure:
+**Manual Scan**
+Run any command from the Command Palette to scan the current file or a specific category.
+
+**Workspace Scan**
+Discovers all supported files in your project (excluding `node_modules`) and scans them with a progress indicator. The scan can be cancelled at any time.
+
+---
+
+## Configuration
+
+Open VS Code Settings (`Ctrl+,`) and search for **"Caspian Security"** to configure the extension.
+
+### General Settings
+
+| Setting                             | Type     | Default   | Description                                 |
+|-------------------------------------|----------|-----------|---------------------------------------------|
+| `caspianSecurity.autoCheck`         | boolean  | `true`    | Automatically run checks as you type        |
+| `caspianSecurity.checkOnSave`       | boolean  | `true`    | Run checks when files are saved             |
+| `caspianSecurity.severity`          | string   | `warning` | Minimum severity level (`error`, `warning`, `info`) |
+| `caspianSecurity.enabledLanguages`  | array    | All 8     | Languages to include in security checks     |
+
+### Category Toggles
+
+Each security category can be independently enabled or disabled:
+
+| Setting                                          | Default | Category                          |
+|--------------------------------------------------|---------|-----------------------------------|
+| `caspianSecurity.enableAuthAccessControl`        | `true`  | Authentication & Access Control   |
+| `caspianSecurity.enableInputValidationXss`       | `true`  | Input Validation & XSS            |
+| `caspianSecurity.enableCsrfProtection`           | `true`  | CSRF Protection                   |
+| `caspianSecurity.enableCorsConfiguration`        | `true`  | CORS Configuration                |
+| `caspianSecurity.enableEncryptionDataProtection` | `true`  | Encryption & Data Protection      |
+| `caspianSecurity.enableApiSecurity`              | `true`  | API Security                      |
+| `caspianSecurity.enableDatabaseSecurity`         | `true`  | Database Security                 |
+| `caspianSecurity.enableFileHandling`             | `true`  | File Handling                     |
+| `caspianSecurity.enableSecretsCredentials`       | `true`  | Secrets & Credentials             |
+| `caspianSecurity.enableFrontendSecurity`         | `true`  | Frontend Security                 |
+| `caspianSecurity.enableBusinessLogicPayment`     | `true`  | Business Logic & Payment Security |
+| `caspianSecurity.enableLoggingMonitoring`        | `true`  | Logging & Monitoring              |
+
+### Example Configuration
 
 ```json
 {
-  "caspianSecurity.autoCheck": true,        // Auto-check as you type
-  "caspianSecurity.checkOnSave": true,      // Check when files are saved
-  "caspianSecurity.severity": "warning",    // Minimum severity: "error", "warning", or "info"
-  "caspianSecurity.enabledLanguages": [
-    "javascript",
-    "typescript",
-    "python",
-    "java",
-    "csharp",
-    "php",
-    "go",
-    "rust"
-  ]
+  "caspianSecurity.autoCheck": true,
+  "caspianSecurity.checkOnSave": true,
+  "caspianSecurity.severity": "warning",
+  "caspianSecurity.enabledLanguages": ["javascript", "typescript", "python"],
+  "caspianSecurity.enableCsrfProtection": false,
+  "caspianSecurity.enableLoggingMonitoring": false
 }
 ```
 
-## Security Rules Reference
+---
 
-### SEC001: SQL Injection
-**Severity**: Error
-**Problem**: String concatenation in database queries allows SQL injection
-**Fix**: Use parameterized queries with placeholders
+## Rule Reference
 
-```javascript
-// ❌ Bad
-query("SELECT * FROM users WHERE id = " + userId);
+Each rule has a **severity** (Error, Warning, or Info) and a **type**: code-detectable rules use pattern matching to find issues in your source code, while informational rules fire as reminders when related code is detected.
 
-// ✅ Good
-query("SELECT * FROM users WHERE id = ?", [userId]);
-```
+### Authentication & Access Control (7 rules)
 
-### SEC002: Hardcoded Credentials
-**Severity**: Error
-**Problem**: Secrets exposed in source code
-**Fix**: Use environment variables
+| Code    | Rule                                              | Severity | Type |
+|---------|---------------------------------------------------|----------|------|
+| AUTH001 | Hardcoded JWT secret detected                     | Error    | Code |
+| AUTH002 | Session configured without secure flags            | Warning  | Code |
+| AUTH003 | Passwords compared with equality instead of constant-time | Error | Code |
+| AUTH004 | Authentication bypass: permissive access control   | Warning  | Code |
+| AUTH005 | Weak password policy: minimum length too short     | Warning  | Code |
+| AUTH006 | Apply rate limiting to authentication endpoints    | Info     | Info |
+| AUTH007 | Token stored in localStorage is vulnerable to XSS  | Warning  | Code |
 
-```javascript
-// ❌ Bad
-const apiKey = "sk_live_abc123xyz";
+### Input Validation & XSS (11 rules)
 
-// ✅ Good
-const apiKey = process.env.API_KEY;
-```
+| Code    | Rule                                              | Severity | Type |
+|---------|---------------------------------------------------|----------|------|
+| XSS001  | Use of innerHTML can lead to XSS                  | Error    | Code |
+| XSS002  | Dangerous use of document.write()                 | Error    | Code |
+| XSS003  | Unsanitized user input in HTML string concatenation | Warning | Code |
+| XSS004  | Use of dangerouslySetInnerHTML in React            | Warning  | Code |
+| XSS005  | Unescaped output in template engine               | Warning  | Code |
+| XSS006  | Request parameters used without validation         | Warning  | Info |
+| XSS007  | Angular security bypass function used              | Warning  | Code |
+| XSS008  | Implement Content Security Policy headers          | Info     | Info |
+| XSS009  | User input used without length validation          | Warning  | Info |
+| XSS010  | User input in inline script context without encoding | Error  | Code |
+| XSS011  | User input in URL without encoding                 | Warning  | Code |
 
-### SEC003: Weak Cryptography
-**Severity**: Warning
-**Problem**: Using outdated or weak cryptographic algorithms
-**Fix**: Use bcrypt, argon2, or PBKDF2 for passwords; SHA-256+ for hashing
+### CSRF Protection (7 rules)
 
-```javascript
-// ❌ Bad
-const hash = crypto.createHash('md5');
+| Code     | Rule                                              | Severity | Type |
+|----------|---------------------------------------------------|----------|------|
+| CSRF001  | Form without CSRF token                           | Warning  | Info |
+| CSRF002  | CSRF protection explicitly disabled               | Error    | Code |
+| CSRF003  | Cookie SameSite set to None                       | Warning  | Code |
+| CSRF004  | State-changing operation using GET method          | Warning  | Code |
+| CSRF005  | Verify CSRF tokens on all state-changing endpoints | Info    | Info |
+| CSRF006  | CSRF token may not be cryptographically random     | Warning  | Code |
+| CSRF007  | Ensure CSRF tokens expire and rotate per session   | Info     | Info |
 
-// ✅ Good
-const hash = crypto.createHash('sha256');
-// Or better: use bcrypt for passwords
-const hash = await bcrypt.hash(password, 10);
-```
+### CORS Configuration (6 rules)
 
-### SEC004: Unsafe Eval
-**Severity**: Error
-**Problem**: eval() executes arbitrary code
-**Fix**: Avoid dynamic code execution; use safer alternatives
+| Code     | Rule                                              | Severity | Type |
+|----------|---------------------------------------------------|----------|------|
+| CORS001  | CORS allows all origins (wildcard)                | Error    | Code |
+| CORS002  | CORS credentials with permissive origin            | Warning  | Info |
+| CORS003  | CORS origin reflected from request without validation | Error | Code |
+| CORS004  | Overly permissive CORS methods                    | Warning  | Code |
+| CORS005  | Review CORS headers for least privilege            | Info     | Info |
+| CORS006  | CORS preflight cache set too long                 | Warning  | Code |
 
-```javascript
-// ❌ Bad
-eval(userInput);
+### Encryption & Data Protection (12 rules)
 
-// ✅ Good
-JSON.parse(userInput);  // For data
-```
+| Code    | Rule                                              | Severity | Type |
+|---------|---------------------------------------------------|----------|------|
+| ENC001  | Weak or deprecated cryptographic algorithm         | Error    | Code |
+| ENC002  | Hardcoded encryption key or IV                     | Error    | Code |
+| ENC003  | HTTP used instead of HTTPS for external URL        | Warning  | Code |
+| ENC004  | TLS/SSL certificate verification disabled          | Error    | Code |
+| ENC005  | Weak random number generation for security purpose | Warning  | Code |
+| ENC006  | ECB mode detected (insecure block cipher mode)     | Error    | Code |
+| ENC007  | Sensitive data logged or printed                   | Warning  | Code |
+| ENC008  | Ensure PII and sensitive fields are encrypted at rest | Info  | Info |
+| ENC009  | Missing or misconfigured HSTS header               | Warning  | Info |
+| ENC010  | PII field logged without masking                   | Warning  | Code |
+| ENC011  | Ensure database backups are encrypted              | Info     | Info |
+| ENC012  | Ensure GDPR data export and deletion capabilities  | Info     | Info |
 
-### SEC005: Path Traversal
-**Severity**: Warning
-**Problem**: Unvalidated file paths allow access to unintended files
-**Fix**: Validate and sanitize file paths
+### API Security (14 rules)
 
-```javascript
-// ❌ Bad
-readFileSync(userProvidedPath);
+| Code    | Rule                                              | Severity | Type |
+|---------|---------------------------------------------------|----------|------|
+| API001  | Ensure authentication middleware on API endpoints  | Warning  | Info |
+| API002  | GraphQL introspection may be enabled in production | Warning  | Code |
+| API003  | Apply rate limiting to API routes                  | Info     | Info |
+| API004  | Verbose error details exposed to client            | Warning  | Code |
+| API005  | Missing request body size limit                    | Warning  | Code |
+| API006  | Debug or development mode enabled                  | Warning  | Code |
+| API007  | Error stack trace exposed                          | Warning  | Code |
+| API008  | Validate API keys/tokens before processing         | Info     | Info |
+| API009  | Ensure API keys have expiration and rotation       | Info     | Info |
+| API010  | Possible IDOR: resource accessed without authz check | Warning | Info |
+| API011  | Overly permissive or wildcard permissions           | Warning  | Code |
+| API012  | Configure burst limits and rate limit headers      | Info     | Info |
+| API013  | Differentiate rate limits for authed vs anonymous  | Info     | Info |
+| API014  | Ensure DDoS protection is in place                 | Info     | Info |
 
-// ✅ Good
-const safePath = path.resolve(allowedDir, userInput);
-if (!safePath.startsWith(allowedDir)) throw new Error('Invalid path');
-readFileSync(safePath);
-```
+### Database Security (12 rules)
 
-### SEC006: Missing CSRF Protection
-**Severity**: Warning
-**Problem**: POST/PUT/DELETE endpoints without CSRF tokens
-**Fix**: Add CSRF middleware
+| Code   | Rule                                              | Severity | Type |
+|--------|---------------------------------------------------|----------|------|
+| DB001  | Potential SQL injection via string concatenation   | Error    | Code |
+| DB002  | NoSQL injection: unsanitized input in query object | Error    | Code |
+| DB003  | Database connection string with embedded credentials | Error  | Code |
+| DB004  | ORM raw query with potential injection             | Warning  | Code |
+| DB005  | Command injection in system/exec call              | Error    | Code |
+| DB006  | SELECT * may over-fetch sensitive columns          | Info     | Info |
+| DB007  | Review destructive SQL operations carefully        | Info     | Info |
+| DB008  | Ensure database user has least-privilege access    | Info     | Info |
+| DB009  | Test database backups regularly                    | Info     | Info |
+| DB010  | Enable database access logging and auditing        | Info     | Info |
+| DB011  | Possible default or common database credentials    | Error    | Code |
+| DB012  | Restrict database network access to app servers    | Info     | Info |
 
-```javascript
-// ❌ Bad
-app.post('/api/update', (req, res) => {});
+### File Handling (14 rules)
 
-// ✅ Good
-app.use(csrf());
-app.post('/api/update', csrfProtection, (req, res) => {});
-```
+| Code     | Rule                                              | Severity | Type |
+|----------|---------------------------------------------------|----------|------|
+| FILE001  | Path traversal: user input in file path            | Error    | Code |
+| FILE002  | Validate file uploads for type, size, and content  | Warning  | Info |
+| FILE003  | Temporary file with insecure permissions            | Warning  | Code |
+| FILE004  | Symlink following may lead to path traversal       | Warning  | Code |
+| FILE005  | World-writable file permissions                    | Warning  | Code |
+| FILE006  | File path constructed from user input              | Error    | Code |
+| FILE007  | Store uploaded files outside the web root          | Info     | Info |
+| FILE008  | File upload without virus/malware scanning         | Warning  | Info |
+| FILE009  | Cloud storage bucket may be publicly accessible    | Error    | Code |
+| FILE010  | Serve files through signed/pre-signed URLs         | Info     | Info |
+| FILE011  | Restrict storage access to authenticated users     | Info     | Info |
+| FILE012  | Executable file extension allowed in upload        | Error    | Code |
+| FILE013  | Enable access logs for file storage                | Info     | Info |
+| FILE014  | File type validated by extension only, not magic bytes | Warning | Code |
 
-### SEC007: Unsafe Deserialization
-**Severity**: Error
-**Problem**: Deserializing untrusted data can execute arbitrary code
-**Fix**: Use safe formats and validate input
+### Secrets & Credentials (8 rules)
 
-```python
-# ❌ Bad
-import pickle
-data = pickle.load(file)
+| Code     | Rule                                              | Severity | Type |
+|----------|---------------------------------------------------|----------|------|
+| CRED001  | Hardcoded password or secret assignment            | Error    | Code |
+| CRED002  | AWS access key pattern detected                    | Error    | Code |
+| CRED003  | Private key content detected in source code        | Error    | Code |
+| CRED004  | GitHub/GitLab personal access token pattern        | Error    | Code |
+| CRED005  | Generic high-entropy secret in string literal      | Warning  | Code |
+| CRED006  | Environment variable with sensitive default fallback | Warning | Code |
+| CRED007  | Sensitive file reference -- ensure it is in .gitignore | Warning | Info |
+| CRED008  | Rotate secrets regularly and audit access          | Info     | Info |
 
-# ✅ Good
-import json
-data = json.load(file)
-```
+### Frontend Security (8 rules)
 
-### SEC008: Missing Input Validation
-**Severity**: Warning
-**Problem**: User input used without validation
-**Fix**: Always validate and sanitize input
+| Code   | Rule                                              | Severity | Type |
+|--------|---------------------------------------------------|----------|------|
+| FE001  | Unsafe eval() allows arbitrary code execution      | Error    | Code |
+| FE002  | postMessage without origin validation              | Warning  | Code |
+| FE003  | Links opened without rel="noopener noreferrer"     | Warning  | Info |
+| FE004  | Insecure iframe without sandbox attribute          | Warning  | Code |
+| FE005  | Script loaded from CDN without integrity check     | Warning  | Code |
+| FE006  | Sensitive data stored via document.cookie           | Warning  | Code |
+| FE007  | Prototype pollution: unsafe __proto__ or constructor | Warning | Code |
+| FE008  | Add Subresource Integrity for CDN resources        | Info     | Info |
 
-```javascript
-// ❌ Bad
-const name = req.body.name;
-document.getElementById('output').innerHTML = name;
+### Business Logic & Payment Security (9 rules)
 
-// ✅ Good
-const name = validator.escape(req.body.name);
-document.getElementById('output').textContent = name;
-```
+| Code   | Rule                                              | Severity | Type |
+|--------|---------------------------------------------------|----------|------|
+| BIZ001 | Premium feature check may be client-side only      | Error    | Info |
+| BIZ002 | Verify payment success server-side before unlocking | Warning | Info |
+| BIZ003 | Refund logic may allow duplicate refunds           | Warning  | Info |
+| BIZ004 | Trial period logic may be exploitable              | Warning  | Info |
+| BIZ005 | Revoke access on subscription cancellation         | Info     | Info |
+| BIZ006 | Keep subscription state synced with payment processor | Info  | Info |
+| BIZ007 | Quota or usage limit may be client-side only       | Warning  | Info |
+| BIZ008 | Usage tracking may rely on client-reported data    | Warning  | Code |
+| BIZ009 | Ensure quota resets occur server-side              | Info     | Info |
 
-### SEC009: Missing Authentication
-**Severity**: Warning
-**Problem**: Protected endpoints accessible without authentication
-**Fix**: Add authentication middleware
+### Logging & Monitoring (9 rules)
 
-```javascript
-// ❌ Bad
-app.get('/api/sensitive', (req, res) => {});
+| Code   | Rule                                              | Severity | Type |
+|--------|---------------------------------------------------|----------|------|
+| LOG001 | Log all authentication attempts                    | Info     | Info |
+| LOG002 | Log all authorization failures                     | Info     | Info |
+| LOG003 | Log all admin and privileged operations            | Info     | Info |
+| LOG004 | Log role/permission and payment/key changes        | Info     | Info |
+| LOG005 | Password may be present in log output              | Error    | Code |
+| LOG006 | API key or secret may be present in log output     | Error    | Code |
+| LOG007 | Store logs securely with encryption                | Info     | Info |
+| LOG008 | Restrict log access to admin/security personnel    | Info     | Info |
+| LOG009 | Log data export and API key change operations      | Info     | Info |
 
-// ✅ Good
-app.get('/api/sensitive', authenticateToken, (req, res) => {});
-```
-
-### SEC010: XXE (XML External Entity)
-**Severity**: Warning
-**Problem**: XML parser can be exploited with external entities
-**Fix**: Disable external entity processing
-
-```javascript
-parser.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-parser.setFeature("http://xml.org/sax/features/external-general-entities", false);
-parser.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-```
-
-### SEC011: Insecure HTTP
-**Severity**: Warning
-**Problem**: Using unencrypted HTTP connections
-**Fix**: Always use HTTPS in production
-
-```javascript
-// ❌ Bad
-fetch('http://api.example.com/data');
-
-// ✅ Good
-fetch('https://api.example.com/data');
-```
-
-### SEC012: Missing Security Headers
-**Severity**: Info
-**Problem**: Important security headers not configured
-**Fix**: Add helmet.js or manually set security headers
-
-```javascript
-const helmet = require('helmet');
-app.use(helmet());
-```
-
-### SEC013: Logging Sensitive Data
-**Severity**: Warning
-**Problem**: Passwords, tokens, or PII exposed in logs
-**Fix**: Never log sensitive information
-
-```javascript
-// ❌ Bad
-console.log('User login:', { username, password });
-
-// ✅ Good
-console.log('User login:', { username });
-```
-
-### SEC014: Missing Rate Limiting
-**Severity**: Info
-**Problem**: No protection against brute force or DoS attacks
-**Fix**: Implement rate limiting
-
-```javascript
-const rateLimit = require('express-rate-limit');
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100
-});
-app.use('/api/', limiter);
-```
-
-### SEC015: Command Injection
-**Severity**: Error
-**Problem**: User input passed to shell commands
-**Fix**: Use safe command execution with argument arrays
-
-```javascript
-// ❌ Bad
-exec(`ping ${userInput}`);
-
-// ✅ Good
-execFile('ping', [userInput]);
-```
-
-### SEC016: Weak Random
-**Severity**: Warning
-**Problem**: Math.random() is not cryptographically secure
-**Fix**: Use crypto.randomBytes()
-
-```javascript
-// ❌ Bad
-const token = Math.random().toString();
-
-// ✅ Good
-const token = crypto.randomBytes(32).toString('hex');
-```
+---
 
 ## Troubleshooting
 
 ### Extension not activating
-- Ensure you have supported files open (JS, TS, Python, Java, etc.)
-- Reload VS Code window: `Ctrl+Shift+P` → "Developer: Reload Window"
+
+- Ensure you have a supported file open (JavaScript, TypeScript, Python, Java, C#, PHP, Go, or Rust)
+- Reload the VS Code window: `Ctrl+Shift+P` then **"Developer: Reload Window"**
 
 ### No issues appearing
-- Check that "Auto Check" is enabled in settings
-- Try running manual check: `Ctrl+Shift+P` → "Caspian Security: Check Current File"
-- Ensure the file language is in `caspianSecurity.enabledLanguages`
 
-### Too many false positives
-- Adjust `severity` level to show only errors
-- Disable specific languages if needed
-- Note: Some rules use pattern matching and may have false positives
+- Verify **Auto Check** is enabled in settings
+- Run a manual check: `Ctrl+Shift+P` then **"Caspian Security: Check Current File"**
+- Confirm the file language is listed in `caspianSecurity.enabledLanguages`
+- Check that the relevant category is not disabled in settings
 
-## Contributing
+### Too many diagnostics
 
-Found a bug? Have a suggestion? Please report issues or submit improvements.
-
-## License
-
-MIT License - See LICENSE file for details
-
-## Security Note
-
-This extension uses pattern-based static analysis. While it covers many common vulnerabilities, **it is not a replacement for professional security auditing**. Use in combination with:
-- SAST tools (SonarQube, Snyk, etc.)
-- Dynamic security testing
-- Regular security audits
-- Code reviews
+- Increase the severity threshold to `error` to see only critical issues
+- Disable informational categories you do not need (e.g., Business Logic, Logging)
+- Informational rules fire once per file to minimize noise
 
 ---
 
-**Stay Secure! 🔒**
+## Complementary Tools
+
+Caspian Security uses pattern-based static analysis. While it provides broad coverage of common vulnerabilities and best practices, it is not a replacement for professional security auditing. For comprehensive coverage, use it alongside:
+
+- **SAST tools** -- SonarQube, Snyk, Semgrep
+- **Dynamic security testing** -- OWASP ZAP, Burp Suite
+- **Dependency scanning** -- npm audit, Dependabot
+- **Regular code reviews and security audits**
+
+---
+
+## Contributing
+
+Found a bug or have a suggestion? Please open an issue on [GitHub](https://github.com/CaspianTools/caspian-security/issues).
+
+---
+
+## License
+
+MIT License -- see [LICENSE](LICENSE) for details.

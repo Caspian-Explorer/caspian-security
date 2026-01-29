@@ -63,7 +63,7 @@ function registerCommands(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('caspian-security.runFullScan', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
-        vscode.window.showWarningMessage('No active editor found');
+        await runWorkspaceCheck();
         return;
       }
       if (!shouldCheckDocument(editor.document)) {
@@ -203,32 +203,50 @@ async function checkDocument(document: vscode.TextDocument, categories?: Securit
 }
 
 async function runWorkspaceCheck() {
-  const documents = vscode.workspace.textDocuments.filter(doc =>
-    shouldCheckDocument(doc)
-  );
+  const globPattern = configManager.getFileGlobPattern();
+  if (!globPattern) {
+    vscode.window.showWarningMessage('No languages enabled for security checks');
+    return;
+  }
 
-  if (documents.length === 0) {
+  const excludePattern = '**/node_modules/**';
+  const files = await vscode.workspace.findFiles(globPattern, excludePattern);
+
+  if (files.length === 0) {
     vscode.window.showInformationMessage('No supported files found in workspace');
     return;
   }
 
+  let issueCount = 0;
+
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: 'Running security checks...',
-      cancellable: false,
+      title: 'Caspian Security: Scanning workspace...',
+      cancellable: true,
     },
-    async (progress) => {
-      for (const document of documents) {
+    async (progress, token) => {
+      for (let i = 0; i < files.length; i++) {
+        if (token.isCancellationRequested) { break; }
+
         progress.report({
-          message: `Checking ${document.fileName}`,
+          message: `(${i + 1}/${files.length}) ${vscode.workspace.asRelativePath(files[i])}`,
+          increment: (1 / files.length) * 100,
         });
-        await checkDocument(document);
+
+        const document = await vscode.workspace.openTextDocument(files[i]);
+        const categories = configManager.getEnabledCategories();
+        const issues = await analyzer.analyzeDocument(document, categories);
+        const diagnostics = diagnosticsManager.createDiagnostics(document, issues);
+        diagnosticsManager.publishDiagnostics(document.uri, diagnostics);
+        issueCount += issues.length;
       }
     }
   );
 
-  vscode.window.showInformationMessage('Security check completed');
+  vscode.window.showInformationMessage(
+    `Caspian Security: Scan complete — ${issueCount} issue(s) found in ${files.length} files`
+  );
 }
 
 function shouldCheckDocument(document: vscode.TextDocument): boolean {

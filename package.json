@@ -1,7 +1,7 @@
 {
   "name": "caspian-security",
   "displayName": "Caspian Security Extension",
-  "description": "Automatically runs security checks on your code, identifying vulnerabilities, unsafe practices, and security best practices",
+  "description": "Real-time security analysis for VS Code — 117 rules across 12 categories detecting vulnerabilities, insecure patterns, and security best practice violations",
   "icon": "icon.png",
   "repository": {
     "type": "git",
@@ -13,14 +13,23 @@
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Linters"
+    "Linters",
+    "Other"
   ],
+  "galleryBanner": {
+    "color": "#1a1a2e",
+    "theme": "dark"
+  },
   "keywords": [
     "security",
     "vulnerability",
     "linting",
     "code-analysis",
-    "static-analysis"
+    "static-analysis",
+    "owasp",
+    "xss",
+    "sql-injection",
+    "csrf"
   ],
   "activationEvents": [
     "onStartupFinished",
