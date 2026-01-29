@@ -1,12 +1,43 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { SecurityAnalyzer } from './analyzer';
 import { DiagnosticsManager } from './diagnosticsManager';
-import { ConfigManager } from './configManager';
+import { ConfigManager, LANGUAGE_EXTENSIONS } from './configManager';
 import { SecurityCategory, CATEGORY_LABELS } from './types';
 import { ResultsStore } from './resultsStore';
 import { StatusBarManager, ScanState } from './statusBarManager';
 import { ResultsPanel } from './resultsPanel';
 import { GitIntegration } from './gitIntegration';
+
+interface LanguageBatch {
+  language: string;
+  displayName: string;
+  files: vscode.Uri[];
+}
+
+function groupFilesByLanguage(files: vscode.Uri[]): LanguageBatch[] {
+  const extToLang: Record<string, string> = {};
+  for (const [lang, exts] of Object.entries(LANGUAGE_EXTENSIONS)) {
+    for (const ext of exts) { extToLang[ext] = lang; }
+  }
+
+  const groups = new Map<string, vscode.Uri[]>();
+  for (const file of files) {
+    const ext = path.extname(file.fsPath).slice(1).toLowerCase();
+    const language = extToLang[ext];
+    if (!language) { continue; }
+    if (!groups.has(language)) { groups.set(language, []); }
+    groups.get(language)!.push(file);
+  }
+
+  return Array.from(groups.entries())
+    .map(([language, langFiles]) => ({
+      language,
+      displayName: language.charAt(0).toUpperCase() + language.slice(1),
+      files: langFiles,
+    }))
+    .sort((a, b) => b.files.length - a.files.length);
+}
 
 let analyzer: SecurityAnalyzer;
 let diagnosticsManager: DiagnosticsManager;
@@ -295,7 +326,7 @@ async function runWorkspaceCheck() {
     return;
   }
 
-  const excludePattern = '{**/node_modules/**,**/out/**,**/dist/**,**/build/**,**/.git/**}';
+  const excludePattern = '{**/node_modules/**,**/out/**,**/dist/**,**/build/**,**/.git/**,**/.next/**}';
   const files = await vscode.workspace.findFiles(globPattern, excludePattern);
 
   if (files.length === 0) {
@@ -303,63 +334,115 @@ async function runWorkspaceCheck() {
     return;
   }
 
-  let issueCount = 0;
+  const batches = groupFilesByLanguage(files);
+  if (batches.length === 0) {
+    vscode.window.showInformationMessage('No supported files found in workspace');
+    return;
+  }
+
+  let totalIssueCount = 0;
+  let totalFilesScanned = 0;
   const startTime = Date.now();
 
   resultsStore.clearAll();
   statusBarManager.setState(ScanState.Scanning);
 
-  await vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: 'Caspian Security: Scanning workspace',
-      cancellable: true,
-    },
-    async (progress, token) => {
-      for (let i = 0; i < files.length; i++) {
-        if (token.isCancellationRequested) { break; }
+  let userStopped = false;
 
-        const relativePath = vscode.workspace.asRelativePath(files[i]);
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        const avgTimePerFile = (Date.now() - startTime) / (i + 1);
-        const estimatedRemaining = Math.ceil((files.length - i - 1) * avgTimePerFile / 1000);
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+    const batch = batches[batchIndex];
+    let batchIssueCount = 0;
+    let batchFilesScanned = 0;
+    let batchCancelled = false;
 
-        progress.report({
-          message: `(${i + 1}/${files.length}) ${relativePath} | ${elapsed}s elapsed | ~${estimatedRemaining}s remaining`,
-          increment: (1 / files.length) * 100,
-        });
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: `Caspian Security: Scanning ${batch.displayName} files (batch ${batchIndex + 1}/${batches.length})`,
+        cancellable: true,
+      },
+      async (progress, token) => {
+        for (let i = 0; i < batch.files.length; i++) {
+          if (token.isCancellationRequested) {
+            batchCancelled = true;
+            break;
+          }
 
-        statusBarManager.showScanning(relativePath);
+          // Yield to the event loop every 10 files to keep VS Code responsive
+          if (i % 10 === 0 && i > 0) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
 
-        const document = await vscode.workspace.openTextDocument(files[i]);
-        const categories = configManager.getEnabledCategories();
-        const issues = await analyzer.analyzeDocument(document, categories);
-        const diagnostics = diagnosticsManager.createDiagnostics(document, issues);
-        diagnosticsManager.publishDiagnostics(document.uri, diagnostics);
+          const file = batch.files[i];
+          const relativePath = vscode.workspace.asRelativePath(file);
+          const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
-        resultsStore.setFileResults(document.uri.toString(), {
-          filePath: document.uri.fsPath,
-          relativePath,
-          languageId: document.languageId,
-          issues,
-          scannedAt: new Date(),
-        });
+          progress.report({
+            message: `(${i + 1}/${batch.files.length}) ${relativePath} | ${elapsed}s elapsed`,
+            increment: (1 / batch.files.length) * 100,
+          });
 
-        issueCount += issues.length;
+          statusBarManager.showScanning(relativePath);
+
+          const document = await vscode.workspace.openTextDocument(file);
+          const categories = configManager.getEnabledCategories();
+          const issues = await analyzer.analyzeDocument(document, categories);
+          const diagnostics = diagnosticsManager.createDiagnostics(document, issues);
+          diagnosticsManager.publishDiagnostics(document.uri, diagnostics);
+
+          resultsStore.setFileResults(document.uri.toString(), {
+            filePath: document.uri.fsPath,
+            relativePath,
+            languageId: document.languageId,
+            issues,
+            scannedAt: new Date(),
+          });
+
+          batchIssueCount += issues.length;
+          batchFilesScanned++;
+        }
+      }
+    );
+
+    totalIssueCount += batchIssueCount;
+    totalFilesScanned += batchFilesScanned;
+    updateHasResultsContext();
+
+    if (batchCancelled) {
+      userStopped = true;
+      break;
+    }
+
+    const isLastBatch = batchIndex === batches.length - 1;
+    if (!isLastBatch) {
+      const nextBatch = batches[batchIndex + 1];
+      const remainingBatches = batches.length - batchIndex - 1;
+      const remainingFiles = batches.slice(batchIndex + 1).reduce((sum, b) => sum + b.files.length, 0);
+
+      const choice = await vscode.window.showInformationMessage(
+        `Caspian Security: ${batch.displayName} batch complete — ${batchIssueCount} issue(s) in ${batchFilesScanned} files. `
+        + `${remainingBatches} batch(es) remaining (${remainingFiles} files). `
+        + `Next: ${nextBatch.displayName} (${nextBatch.files.length} files)`,
+        'Continue',
+        'Stop'
+      );
+
+      if (choice !== 'Continue') {
+        userStopped = true;
+        break;
       }
     }
-  );
+  }
 
   const duration = Date.now() - startTime;
-  resultsStore.setScanMeta(duration, 'workspace');
+  resultsStore.setScanMeta(duration, userStopped ? 'workspace (partial)' : 'workspace');
   statusBarManager.showComplete();
   updateHasResultsContext();
 
   vscode.window.showInformationMessage(
-    `Caspian Security: Scan complete — ${issueCount} issue(s) found in ${files.length} files`
+    `Caspian Security: Scan ${userStopped ? 'stopped' : 'complete'} — ${totalIssueCount} issue(s) found in ${totalFilesScanned} files`
   );
 
-  // Auto-open results panel after scan
   resultsPanel.show();
 }
 

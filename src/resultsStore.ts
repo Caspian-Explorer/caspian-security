@@ -27,10 +27,19 @@ export class ResultsStore implements vscode.Disposable {
 
   private _scanDuration = 0;
   private _scanType = '';
+  private _debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
   setFileResults(uriString: string, result: FileSecurityResult): void {
     this.results.set(uriString, result);
-    this._onDidChange.fire();
+    this._debouncedFire();
+  }
+
+  private _debouncedFire(): void {
+    if (this._debounceTimer) { clearTimeout(this._debounceTimer); }
+    this._debounceTimer = setTimeout(() => {
+      this._debounceTimer = undefined;
+      this._onDidChange.fire();
+    }, 300);
   }
 
   getFileResults(uriString: string): FileSecurityResult | undefined {
@@ -165,6 +174,7 @@ export class ResultsStore implements vscode.Disposable {
   }
 
   dispose(): void {
+    if (this._debounceTimer) { clearTimeout(this._debounceTimer); }
     this._onDidChange.dispose();
     this.results.clear();
   }

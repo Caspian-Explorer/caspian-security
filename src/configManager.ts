@@ -18,7 +18,7 @@ const CATEGORY_SETTING_KEYS: Record<SecurityCategory, string> = {
   [SecurityCategory.InfrastructureDeployment]: 'enableInfrastructureDeployment',
 };
 
-const LANGUAGE_EXTENSIONS: Record<string, string[]> = {
+export const LANGUAGE_EXTENSIONS: Record<string, string[]> = {
   javascript: ['js', 'jsx', 'mjs', 'cjs'],
   typescript: ['ts', 'tsx', 'mts', 'cts'],
   python: ['py'],
