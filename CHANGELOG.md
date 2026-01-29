@@ -4,7 +4,7 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
-## [2.0.0] - 2025-01-29
+## [3.0.0] - 2025-01-29
 
 ### Added
 
