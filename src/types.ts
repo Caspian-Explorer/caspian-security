@@ -47,6 +47,12 @@ export interface SecurityIssue {
   category: SecurityCategory;
 }
 
+export const SEVERITY_LABELS: Record<SecuritySeverity, string> = {
+  [SecuritySeverity.Error]: 'Error',
+  [SecuritySeverity.Warning]: 'Warning',
+  [SecuritySeverity.Info]: 'Info',
+};
+
 export const CATEGORY_LABELS: Record<SecurityCategory, string> = {
   [SecurityCategory.AuthAccessControl]: 'Authentication & Access Control',
   [SecurityCategory.InputValidationXSS]: 'Input Validation & XSS',
