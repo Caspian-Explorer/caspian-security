@@ -1,0 +1,81 @@
+import * as vscode from 'vscode';
+import { ResultsStore } from './resultsStore';
+
+export enum ScanState {
+  Idle = 'idle',
+  Scanning = 'scanning',
+  Complete = 'complete',
+}
+
+export class StatusBarManager implements vscode.Disposable {
+  private statusBarItem: vscode.StatusBarItem;
+  private state: ScanState = ScanState.Idle;
+
+  constructor(private resultsStore: ResultsStore) {
+    this.statusBarItem = vscode.window.createStatusBarItem(
+      vscode.StatusBarAlignment.Left,
+      100
+    );
+    this.statusBarItem.command = 'caspian-security.showResultsPanel';
+    this.showIdle();
+    this.statusBarItem.show();
+
+    this.resultsStore.onDidChange(() => {
+      if (this.state === ScanState.Complete) {
+        this.updateIssueCount();
+      }
+    });
+  }
+
+  setState(state: ScanState): void {
+    this.state = state;
+    switch (state) {
+      case ScanState.Idle:
+        this.showIdle();
+        break;
+      case ScanState.Scanning:
+        this.showScanning();
+        break;
+      case ScanState.Complete:
+        this.showComplete();
+        break;
+    }
+  }
+
+  showIdle(): void {
+    this.state = ScanState.Idle;
+    this.statusBarItem.text = '$(shield) Caspian Security';
+    this.statusBarItem.tooltip = 'Caspian Security - Click to show results';
+    this.statusBarItem.backgroundColor = undefined;
+  }
+
+  showScanning(fileName?: string): void {
+    this.state = ScanState.Scanning;
+    const fileInfo = fileName ? `: ${fileName}` : '';
+    this.statusBarItem.text = `$(loading~spin) Scanning${fileInfo}`;
+    this.statusBarItem.tooltip = `Caspian Security - Scanning${fileInfo}`;
+    this.statusBarItem.backgroundColor = undefined;
+  }
+
+  showComplete(): void {
+    this.state = ScanState.Complete;
+    this.updateIssueCount();
+  }
+
+  updateIssueCount(): void {
+    const count = this.resultsStore.getTotalIssueCount();
+    if (count > 0) {
+      this.statusBarItem.text = `$(warning) Caspian: ${count} issue${count !== 1 ? 's' : ''}`;
+      this.statusBarItem.tooltip = `Caspian Security - ${count} issue(s) found. Click to view.`;
+      this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+    } else {
+      this.statusBarItem.text = '$(check) Caspian: No issues';
+      this.statusBarItem.tooltip = 'Caspian Security - No issues found';
+      this.statusBarItem.backgroundColor = undefined;
+    }
+  }
+
+  dispose(): void {
+    this.statusBarItem.dispose();
+  }
+}

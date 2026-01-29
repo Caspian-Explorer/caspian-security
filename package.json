@@ -121,8 +121,43 @@
       {
         "command": "caspian-security.check-infrastructure-deployment",
         "title": "Caspian Security: Check Infrastructure & Deployment"
+      },
+      {
+        "command": "caspian-security.showResultsPanel",
+        "title": "Caspian Security: Show Results Panel"
+      },
+      {
+        "command": "caspian-security.exportJSON",
+        "title": "Caspian Security: Export Results to JSON"
+      },
+      {
+        "command": "caspian-security.exportCSV",
+        "title": "Caspian Security: Export Results to CSV"
+      },
+      {
+        "command": "caspian-security.runCheckUncommitted",
+        "title": "Caspian Security: Scan Uncommitted Files"
       }
     ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "caspian-security.runCheckUncommitted",
+          "group": "navigation",
+          "when": "scmProvider == git"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "caspian-security.exportJSON",
+          "when": "caspian-security.hasResults"
+        },
+        {
+          "command": "caspian-security.exportCSV",
+          "when": "caspian-security.hasResults"
+        }
+      ]
+    },
     "configuration": {
       "title": "Caspian Security",
       "properties": {

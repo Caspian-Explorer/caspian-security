@@ -5,7 +5,9 @@
       "Bash(gh issue list:*)",
       "Bash(dir:*)",
       "Bash(npm run compile:*)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "Bash(wc:*)",
+      "Bash(grep:*)"
     ]
   }
 }

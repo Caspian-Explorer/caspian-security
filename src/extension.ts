@@ -3,10 +3,18 @@ import { SecurityAnalyzer } from './analyzer';
 import { DiagnosticsManager } from './diagnosticsManager';
 import { ConfigManager } from './configManager';
 import { SecurityCategory, CATEGORY_LABELS } from './types';
+import { ResultsStore } from './resultsStore';
+import { StatusBarManager, ScanState } from './statusBarManager';
+import { ResultsPanel } from './resultsPanel';
+import { GitIntegration } from './gitIntegration';
 
 let analyzer: SecurityAnalyzer;
 let diagnosticsManager: DiagnosticsManager;
 let configManager: ConfigManager;
+let resultsStore: ResultsStore;
+let statusBarManager: StatusBarManager;
+let resultsPanel: ResultsPanel;
+let gitIntegration: GitIntegration;
 
 export function activate(context: vscode.ExtensionContext) {
   try {
@@ -15,9 +23,20 @@ export function activate(context: vscode.ExtensionContext) {
     configManager = new ConfigManager();
     diagnosticsManager = new DiagnosticsManager();
     analyzer = new SecurityAnalyzer();
+    resultsStore = new ResultsStore();
+    statusBarManager = new StatusBarManager(resultsStore);
+    resultsPanel = new ResultsPanel(context.extensionUri, resultsStore);
+    gitIntegration = new GitIntegration();
 
     context.subscriptions.push(configManager);
     context.subscriptions.push(diagnosticsManager);
+    context.subscriptions.push(resultsStore);
+    context.subscriptions.push(statusBarManager);
+    context.subscriptions.push(resultsPanel);
+    context.subscriptions.push(gitIntegration);
+
+    // Initialize git integration (non-blocking)
+    gitIntegration.initialize();
 
     registerCommands(context);
     registerCategoryCommands(context);
@@ -73,6 +92,7 @@ function registerCommands(context: vscode.ExtensionContext) {
       const allCategories = Object.values(SecurityCategory);
       await checkDocument(editor.document, allCategories);
       vscode.window.showInformationMessage('Caspian Security: Full scan completed');
+      resultsPanel.show();
     })
   );
 
@@ -86,6 +106,51 @@ function registerCommands(context: vscode.ExtensionContext) {
         }
       }
       vscode.window.showInformationMessage('No fix suggestion available for this issue.');
+    })
+  );
+
+  // New commands: Results Panel
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.showResultsPanel', () => {
+      resultsPanel.show();
+    })
+  );
+
+  // New commands: Export
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.exportJSON', async () => {
+      const json = resultsStore.toJSON();
+      const uri = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.file('caspian-security-results.json'),
+        filters: { 'JSON Files': ['json'] },
+      });
+      if (uri) {
+        const fs = await import('fs');
+        fs.writeFileSync(uri.fsPath, json, 'utf-8');
+        vscode.window.showInformationMessage(`Caspian Security: Results exported to ${uri.fsPath}`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.exportCSV', async () => {
+      const csv = resultsStore.toCSV();
+      const uri = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.file('caspian-security-results.csv'),
+        filters: { 'CSV Files': ['csv'] },
+      });
+      if (uri) {
+        const fs = await import('fs');
+        fs.writeFileSync(uri.fsPath, csv, 'utf-8');
+        vscode.window.showInformationMessage(`Caspian Security: Results exported to ${uri.fsPath}`);
+      }
+    })
+  );
+
+  // New command: Scan Uncommitted Files
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.runCheckUncommitted', async () => {
+      await runUncommittedCheck();
     })
   );
 }
@@ -123,6 +188,16 @@ async function checkDocumentByCategory(
     const existingDiagnostics = vscode.languages.getDiagnostics(document.uri)
       .filter(d => d.source === 'Caspian Security' && !d.message.startsWith(`[${label}]`));
     diagnosticsManager.publishDiagnostics(document.uri, [...existingDiagnostics, ...diagnostics]);
+
+    // Store results
+    resultsStore.setFileResults(document.uri.toString(), {
+      filePath: document.uri.fsPath,
+      relativePath: vscode.workspace.asRelativePath(document.uri),
+      languageId: document.languageId,
+      issues,
+      scannedAt: new Date(),
+    });
+    updateHasResultsContext();
 
     if (issues.length > 0) {
       vscode.window.showInformationMessage(
@@ -171,6 +246,7 @@ function registerDocumentListeners(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.workspace.onDidCloseTextDocument((document) => {
       diagnosticsManager.clearDiagnostics(document.uri);
+      resultsStore.clearFileResults(document.uri.toString());
     })
   );
 
@@ -193,6 +269,16 @@ async function checkDocument(document: vscode.TextDocument, categories?: Securit
     const issues = await analyzer.analyzeDocument(document, effectiveCategories);
     const diagnostics = diagnosticsManager.createDiagnostics(document, issues);
     diagnosticsManager.publishDiagnostics(document.uri, diagnostics);
+
+    // Store results for the results panel and status bar
+    resultsStore.setFileResults(document.uri.toString(), {
+      filePath: document.uri.fsPath,
+      relativePath: vscode.workspace.asRelativePath(document.uri),
+      languageId: document.languageId,
+      issues,
+      scannedAt: new Date(),
+    });
+    updateHasResultsContext();
 
     if (issues.length > 0) {
       console.log(`Found ${issues.length} security issues`);
@@ -218,35 +304,153 @@ async function runWorkspaceCheck() {
   }
 
   let issueCount = 0;
+  const startTime = Date.now();
+
+  resultsStore.clearAll();
+  statusBarManager.setState(ScanState.Scanning);
 
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: 'Caspian Security: Scanning workspace...',
+      title: 'Caspian Security: Scanning workspace',
       cancellable: true,
     },
     async (progress, token) => {
       for (let i = 0; i < files.length; i++) {
         if (token.isCancellationRequested) { break; }
 
+        const relativePath = vscode.workspace.asRelativePath(files[i]);
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        const avgTimePerFile = (Date.now() - startTime) / (i + 1);
+        const estimatedRemaining = Math.ceil((files.length - i - 1) * avgTimePerFile / 1000);
+
         progress.report({
-          message: `(${i + 1}/${files.length}) ${vscode.workspace.asRelativePath(files[i])}`,
+          message: `(${i + 1}/${files.length}) ${relativePath} | ${elapsed}s elapsed | ~${estimatedRemaining}s remaining`,
           increment: (1 / files.length) * 100,
         });
+
+        statusBarManager.showScanning(relativePath);
 
         const document = await vscode.workspace.openTextDocument(files[i]);
         const categories = configManager.getEnabledCategories();
         const issues = await analyzer.analyzeDocument(document, categories);
         const diagnostics = diagnosticsManager.createDiagnostics(document, issues);
         diagnosticsManager.publishDiagnostics(document.uri, diagnostics);
+
+        resultsStore.setFileResults(document.uri.toString(), {
+          filePath: document.uri.fsPath,
+          relativePath,
+          languageId: document.languageId,
+          issues,
+          scannedAt: new Date(),
+        });
+
         issueCount += issues.length;
       }
     }
   );
 
+  const duration = Date.now() - startTime;
+  resultsStore.setScanMeta(duration, 'workspace');
+  statusBarManager.showComplete();
+  updateHasResultsContext();
+
   vscode.window.showInformationMessage(
     `Caspian Security: Scan complete — ${issueCount} issue(s) found in ${files.length} files`
   );
+
+  // Auto-open results panel after scan
+  resultsPanel.show();
+}
+
+async function runUncommittedCheck() {
+  if (!gitIntegration.isGitRepository()) {
+    vscode.window.showWarningMessage('Caspian Security: No git repository found in workspace');
+    return;
+  }
+
+  const changedFileUris = await gitIntegration.getUncommittedFiles();
+
+  // Filter to supported languages
+  const supportedFiles: vscode.Uri[] = [];
+  for (const uri of changedFileUris) {
+    try {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      if (shouldCheckDocument(doc)) {
+        supportedFiles.push(uri);
+      }
+    } catch {
+      // File may have been deleted or be unreadable
+    }
+  }
+
+  if (supportedFiles.length === 0) {
+    vscode.window.showInformationMessage('Caspian Security: No uncommitted files to scan');
+    return;
+  }
+
+  let issueCount = 0;
+  const startTime = Date.now();
+
+  resultsStore.clearAll();
+  statusBarManager.setState(ScanState.Scanning);
+
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: 'Caspian Security: Scanning uncommitted files',
+      cancellable: true,
+    },
+    async (progress, token) => {
+      for (let i = 0; i < supportedFiles.length; i++) {
+        if (token.isCancellationRequested) { break; }
+
+        const relativePath = vscode.workspace.asRelativePath(supportedFiles[i]);
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        const avgTimePerFile = (Date.now() - startTime) / (i + 1);
+        const estimatedRemaining = Math.ceil((supportedFiles.length - i - 1) * avgTimePerFile / 1000);
+
+        progress.report({
+          message: `(${i + 1}/${supportedFiles.length}) ${relativePath} | ${elapsed}s elapsed | ~${estimatedRemaining}s remaining`,
+          increment: (1 / supportedFiles.length) * 100,
+        });
+
+        statusBarManager.showScanning(relativePath);
+
+        const document = await vscode.workspace.openTextDocument(supportedFiles[i]);
+        const categories = configManager.getEnabledCategories();
+        const issues = await analyzer.analyzeDocument(document, categories);
+        const diagnostics = diagnosticsManager.createDiagnostics(document, issues);
+        diagnosticsManager.publishDiagnostics(document.uri, diagnostics);
+
+        resultsStore.setFileResults(document.uri.toString(), {
+          filePath: document.uri.fsPath,
+          relativePath,
+          languageId: document.languageId,
+          issues,
+          scannedAt: new Date(),
+        });
+
+        issueCount += issues.length;
+      }
+    }
+  );
+
+  const duration = Date.now() - startTime;
+  resultsStore.setScanMeta(duration, 'uncommitted');
+  statusBarManager.showComplete();
+  updateHasResultsContext();
+
+  vscode.window.showInformationMessage(
+    `Caspian Security: Scan complete — ${issueCount} issue(s) found in ${supportedFiles.length} uncommitted files`
+  );
+
+  // Auto-open results panel after scan
+  resultsPanel.show();
+}
+
+function updateHasResultsContext() {
+  vscode.commands.executeCommand('setContext', 'caspian-security.hasResults', resultsStore.getTotalIssueCount() > 0);
 }
 
 function shouldCheckDocument(document: vscode.TextDocument): boolean {
