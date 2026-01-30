@@ -9,6 +9,9 @@ import { StatusBarManager, ScanState } from './statusBarManager';
 import { ResultsPanel } from './resultsPanel';
 import { GitIntegration } from './gitIntegration';
 import { checkDependencies, formatResultsAsText, DependencyCheckResult } from './dependencyChecker';
+import { AIFixService, AIProviderConfig, AIFixRequest, AIFixError } from './aiFixService';
+import { FixTracker } from './fixTracker';
+import { AISettingsPanel } from './aiSettingsPanel';
 
 const BATCH_SIZE = 50;
 
@@ -85,6 +88,10 @@ let statusBarManager: StatusBarManager;
 let resultsPanel: ResultsPanel;
 let gitIntegration: GitIntegration;
 let dependencyOutputChannel: vscode.OutputChannel;
+let aiFixService: AIFixService;
+let fixTracker: FixTracker;
+let aiSettingsPanel: AISettingsPanel;
+let fixPreviewProvider: FixPreviewContentProvider;
 
 export function activate(context: vscode.ExtensionContext) {
   try {
@@ -94,18 +101,28 @@ export function activate(context: vscode.ExtensionContext) {
     diagnosticsManager = new DiagnosticsManager();
     analyzer = new SecurityAnalyzer();
     resultsStore = new ResultsStore();
-    statusBarManager = new StatusBarManager(resultsStore);
-    resultsPanel = new ResultsPanel(context.extensionUri, resultsStore);
+    fixTracker = new FixTracker(context.workspaceState);
+    aiFixService = new AIFixService(context.secrets);
+    statusBarManager = new StatusBarManager(resultsStore, fixTracker);
+    resultsPanel = new ResultsPanel(context.extensionUri, resultsStore, fixTracker);
     gitIntegration = new GitIntegration();
     dependencyOutputChannel = vscode.window.createOutputChannel('Caspian Security: Dependencies');
+    aiSettingsPanel = new AISettingsPanel(context.extensionUri, context.secrets, aiFixService);
+    fixPreviewProvider = new FixPreviewContentProvider();
 
     context.subscriptions.push(configManager);
     context.subscriptions.push(diagnosticsManager);
     context.subscriptions.push(resultsStore);
+    context.subscriptions.push(fixTracker);
+    context.subscriptions.push(aiFixService);
     context.subscriptions.push(statusBarManager);
     context.subscriptions.push(resultsPanel);
     context.subscriptions.push(gitIntegration);
     context.subscriptions.push(dependencyOutputChannel);
+    context.subscriptions.push(aiSettingsPanel);
+    context.subscriptions.push(
+      vscode.workspace.registerTextDocumentContentProvider('caspian-fix-preview', fixPreviewProvider)
+    );
 
     // Initialize git integration (non-blocking)
     gitIntegration.initialize();
@@ -170,14 +187,104 @@ function registerCommands(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('caspian-security.fixIssue', async (diagnostic: vscode.Diagnostic) => {
-      if (diagnostic && diagnostic.code) {
-        const rule = analyzer.getRuleByCode(String(diagnostic.code));
-        if (rule) {
-          vscode.window.showInformationMessage(`Fix: ${rule.suggestion}`);
-          return;
-        }
+      if (!diagnostic || !diagnostic.code) {
+        vscode.window.showInformationMessage('No fix suggestion available for this issue.');
+        return;
       }
-      vscode.window.showInformationMessage('No fix suggestion available for this issue.');
+      const rule = analyzer.getRuleByCode(String(diagnostic.code));
+      if (!rule) {
+        vscode.window.showInformationMessage('No fix suggestion available for this issue.');
+        return;
+      }
+
+      const providerConfig = await aiFixService.getProviderConfig();
+      if (!providerConfig) {
+        const choice = await vscode.window.showWarningMessage(
+          'AI fix requires an API key. Configure one in AI Settings.',
+          'Open AI Settings',
+          'Show Suggestion Only'
+        );
+        if (choice === 'Open AI Settings') {
+          aiSettingsPanel.show();
+        } else if (choice === 'Show Suggestion Only') {
+          vscode.window.showInformationMessage(`Fix: ${rule.suggestion}`);
+        }
+        return;
+      }
+
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showInformationMessage(`Fix: ${rule.suggestion}`);
+        return;
+      }
+
+      const document = editor.document;
+      const line = diagnostic.range.start.line;
+      const column = diagnostic.range.start.character;
+      const relativePath = vscode.workspace.asRelativePath(document.uri);
+      const lines = document.getText().split('\n');
+      const pattern = lines[line]?.substring(column, column + (diagnostic.range.end.character - column)) || '';
+
+      await executeAIFixFromPanel({
+        filePath: document.uri.fsPath,
+        relativePath,
+        line,
+        column,
+        code: String(diagnostic.code),
+        pattern,
+        message: rule.message,
+        suggestion: rule.suggestion,
+        category: rule.category,
+        severity: String(rule.severity),
+      }, providerConfig);
+    })
+  );
+
+  // AI Settings command
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.openAISettings', () => {
+      aiSettingsPanel.show();
+    })
+  );
+
+  // AI Fix from results panel
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.aiFixIssue', async (issueData: {
+      filePath: string; relativePath: string; line: number; column: number;
+      code: string; pattern: string; message: string; suggestion: string;
+      category: string; severity: string;
+    }) => {
+      const providerConfig = await aiFixService.getProviderConfig();
+      if (!providerConfig) {
+        const choice = await vscode.window.showWarningMessage(
+          'AI fix requires an API key. Configure one in AI Settings.',
+          'Open AI Settings'
+        );
+        if (choice === 'Open AI Settings') {
+          aiSettingsPanel.show();
+        }
+        return;
+      }
+      await executeAIFixFromPanel(issueData, providerConfig);
+    })
+  );
+
+  // Ignore issue
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.ignoreIssue', (issueData: {
+      filePath: string; relativePath: string; line: number; code: string; pattern: string;
+    }) => {
+      const key = FixTracker.makeKey(issueData.relativePath, issueData.code, issueData.line, issueData.pattern);
+      fixTracker.markIgnored(key, issueData.filePath, issueData.relativePath, issueData.code, issueData.line, issueData.pattern);
+      vscode.window.showInformationMessage(`Issue ${issueData.code} marked as ignored.`);
+    })
+  );
+
+  // Reset fix tracker
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.resetFixTracker', () => {
+      fixTracker.clearAll();
+      vscode.window.showInformationMessage('Caspian Security: Fix tracker reset.');
     })
   );
 
@@ -720,6 +827,188 @@ function shouldCheckDocument(document: vscode.TextDocument): boolean {
 
   const enabledLanguages = configManager.getEnabledLanguages();
   return enabledLanguages.includes(document.languageId);
+}
+
+async function executeAIFixFromPanel(
+  issueData: {
+    filePath: string; relativePath: string; line: number; column: number;
+    code: string; pattern: string; message: string; suggestion: string;
+    category: string; severity: string;
+  },
+  providerConfig: AIProviderConfig
+): Promise<void> {
+  const uri = vscode.Uri.file(issueData.filePath);
+  let document: vscode.TextDocument;
+  try {
+    document = await vscode.workspace.openTextDocument(uri);
+  } catch {
+    vscode.window.showErrorMessage(`Cannot open file: ${issueData.filePath}`);
+    return;
+  }
+
+  const fullContent = document.getText();
+  const lines = fullContent.split('\n');
+  const originalLine = lines[issueData.line] || '';
+  const startLine = Math.max(0, issueData.line - 10);
+  const endLine = Math.min(lines.length, issueData.line + 11);
+  const surroundingCode = lines.slice(startLine, endLine).join('\n');
+
+  const request: AIFixRequest = {
+    filePath: issueData.relativePath,
+    languageId: document.languageId,
+    issueCode: issueData.code,
+    issueMessage: issueData.message,
+    issueSuggestion: issueData.suggestion,
+    issueCategory: issueData.category,
+    issueSeverity: issueData.severity,
+    issuePattern: issueData.pattern,
+    issueLine: issueData.line,
+    issueColumn: issueData.column,
+    originalLineText: originalLine,
+    surroundingCode,
+    fullFileContent: fullContent,
+  };
+
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `Caspian Security: Generating AI fix for ${issueData.code}...`,
+      cancellable: false,
+    },
+    async () => {
+      try {
+        const response = await aiFixService.generateFix(providerConfig, request);
+        const applied = await showDiffAndApply(document, fullContent, response);
+        if (applied) {
+          const key = FixTracker.makeKey(issueData.relativePath, issueData.code, issueData.line, issueData.pattern);
+          fixTracker.markFixed(
+            key, issueData.filePath, issueData.relativePath,
+            issueData.code, issueData.line, issueData.pattern,
+            response.explanation, providerConfig.provider
+          );
+
+          // Re-scan to verify
+          const updatedDoc = await vscode.workspace.openTextDocument(uri);
+          await checkDocument(updatedDoc);
+
+          const updatedResults = resultsStore.getFileResults(uri.toString());
+          if (updatedResults) {
+            const stillPresent = updatedResults.issues.some(
+              i => i.code === issueData.code && i.line === issueData.line
+            );
+            if (stillPresent) {
+              fixTracker.markFixFailed(key);
+              vscode.window.showWarningMessage(
+                `AI fix applied but issue ${issueData.code} still detected. The fix may be insufficient.`
+              );
+            } else {
+              vscode.window.showInformationMessage(`Issue ${issueData.code} fixed and verified.`);
+            }
+          }
+        }
+      } catch (error: any) {
+        handleAIError(error);
+      }
+    }
+  );
+}
+
+async function showDiffAndApply(
+  document: vscode.TextDocument,
+  originalContent: string,
+  response: { fixedFileContent: string; explanation: string; confidence: string }
+): Promise<boolean> {
+  const choice = await vscode.window.showInformationMessage(
+    `AI Fix Ready (confidence: ${response.confidence})`,
+    { modal: true, detail: response.explanation },
+    'Review Diff & Apply',
+    'Cancel'
+  );
+
+  if (choice !== 'Review Diff & Apply') {
+    return false;
+  }
+
+  // Show diff preview
+  const proposedUri = vscode.Uri.parse(
+    `caspian-fix-preview:${document.uri.path}?proposed&t=${Date.now()}`
+  );
+  fixPreviewProvider.setContent(proposedUri.toString(), response.fixedFileContent);
+
+  await vscode.commands.executeCommand(
+    'vscode.diff',
+    document.uri,
+    proposedUri,
+    `${vscode.workspace.asRelativePath(document.uri)} (Original vs AI Fix)`,
+    { preview: true }
+  );
+
+  const applyChoice = await vscode.window.showInformationMessage(
+    'Apply this AI-generated fix?',
+    'Apply',
+    'Cancel'
+  );
+
+  if (applyChoice !== 'Apply') {
+    return false;
+  }
+
+  const edit = new vscode.WorkspaceEdit();
+  const fullRange = new vscode.Range(
+    document.positionAt(0),
+    document.positionAt(originalContent.length)
+  );
+  edit.replace(document.uri, fullRange, response.fixedFileContent);
+  const success = await vscode.workspace.applyEdit(edit);
+
+  if (success) {
+    await document.save();
+  } else {
+    vscode.window.showErrorMessage('Failed to apply the fix. The file may be read-only.');
+  }
+
+  return success;
+}
+
+function handleAIError(error: any): void {
+  if (error && error.type) {
+    switch (error.type) {
+      case 'auth':
+        vscode.window.showErrorMessage('Caspian Security: Invalid API key. Please check your AI Settings.');
+        break;
+      case 'rate_limit':
+        vscode.window.showErrorMessage('Caspian Security: API rate limit exceeded. Please try again later.');
+        break;
+      case 'network':
+        vscode.window.showErrorMessage('Caspian Security: Network error. Check your internet connection.');
+        break;
+      case 'invalid_response':
+        vscode.window.showErrorMessage('Caspian Security: AI returned an unexpected response. Try again or try a different model.');
+        break;
+      case 'no_key':
+        vscode.window.showWarningMessage('Caspian Security: No API key configured. Open AI Settings to add one.');
+        break;
+      default:
+        vscode.window.showErrorMessage(`Caspian Security: AI fix failed - ${error.message || 'Unknown error'}`);
+    }
+  } else {
+    vscode.window.showErrorMessage(`Caspian Security: AI fix failed - ${String(error)}`);
+  }
+}
+
+class FixPreviewContentProvider implements vscode.TextDocumentContentProvider {
+  private contents = new Map<string, string>();
+  private _onDidChange = new vscode.EventEmitter<vscode.Uri>();
+  readonly onDidChange = this._onDidChange.event;
+
+  setContent(uriString: string, content: string): void {
+    this.contents.set(uriString, content);
+    this._onDidChange.fire(vscode.Uri.parse(uriString));
+  }
+
+  provideTextDocumentContent(uri: vscode.Uri): string {
+    return this.contents.get(uri.toString()) || '';
+  }
 }
 
 export function deactivate() {

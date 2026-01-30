@@ -22,18 +22,19 @@
                     │   (extension.ts)      │
                     └───────────┬────────────┘
                                 │
-                ┌───────────────┼──────────────────┐
-                │               │                  │
-        ┌───────▼────────┐  ┌───▼────────┐  ┌────▼──────┐
-        │  Analyzer      │  │Diagnostics │  │  Config   │
-        │  (analyzer.ts) │  │  Manager   │  │  Manager  │
-        │                │  │(diagnostic │  │(config    │
-        │- Rules         │  │ Manager.ts)│  │Manager.ts)│
-        │- Patterns      │  │            │  │           │
-        │- Matching      │  │- Create    │  │- Load     │
-        │- Detection     │  │- Publish   │  │- Save     │
-        └────────────────┘  │- Display   │  │- Listen   │
-                            └────────────┘  └───────────┘
+    ┌───────────┬───────────────┼──────────────────┬────────────┐
+    │           │               │                  │            │
+┌───▼────┐ ┌───▼────────┐  ┌───▼────────┐  ┌────▼──────┐ ┌───▼────────┐
+│AI Fix  │ │  Analyzer  │  │Diagnostics │  │  Config   │ │ Fix        │
+│Service │ │(analyzer.ts│  │  Manager   │  │  Manager  │ │ Tracker    │
+│(aiFix  │ │)           │  │(diagnostic │  │(config    │ │(fixTracker │
+│Service │ │- Rules     │  │ Manager.ts)│  │Manager.ts)│ │.ts)        │
+│.ts)    │ │- Patterns  │  │            │  │           │ │            │
+│        │ │- Matching  │  │- Create    │  │- Load     │ │- Track     │
+│- Claude│ │- Detection │  │- Publish   │  │- Save     │ │- Persist   │
+│- OpenAI│ └────────────┘  │- Display   │  │- Listen   │ │- Events    │
+│- Gemini│                 └────────────┘  └───────────┘ └────────────┘
+└────────┘
 ```
 
 ## Data Flow
@@ -103,6 +104,7 @@ Display as red/yellow squiggles
 - Event registration and handling
 - Command registration
 - Orchestrating components
+- AI fix workflow (generate, diff preview, apply, verify)
 
 **Key Functions:**
 - `activate()` - Extension entry point
@@ -110,6 +112,9 @@ Display as red/yellow squiggles
 - `registerDocumentListeners()` - Set up event handlers
 - `checkDocument()` - Trigger analysis on a document
 - `runWorkspaceCheck()` - Batch analyze all files
+- `executeAIFixFromPanel()` - AI fix workflow: generate fix, show diff, apply, re-scan
+- `showDiffAndApply()` - Show side-by-side diff preview and apply on confirmation
+- `handleAIError()` - Typed error handling for AI provider errors
 
 ### analyzer.ts (Security Logic)
 **Responsibilities:**
@@ -156,6 +161,8 @@ Display as red/yellow squiggles
 - `getAutoCheck()` - Check if auto-check enabled
 - `getCheckOnSave()` - Check if check-on-save enabled
 - `getEnabledLanguages()` - Get supported languages list
+- `getAIProvider()` / `setAIProvider()` - AI provider selection
+- `getAIModel()` / `setAIModel()` - Optional model override
 - `resetToDefaults()` - Reset all settings
 
 ### types.ts (Type Definitions)
@@ -164,6 +171,42 @@ Display as red/yellow squiggles
 - `SecurityRule` interface
 - `SecurityIssue` interface
 - Type safety throughout codebase
+
+### aiFixService.ts (AI Fix Generation)
+**Responsibilities:**
+- AI provider abstraction (Anthropic, OpenAI, Gemini)
+- Secure API key storage via VS Code SecretStorage
+- Prompt engineering for security-focused code repair
+- HTTP communication with AI APIs
+- Response parsing with structured delimiters
+
+**Key Functions:**
+- `getProviderConfig()` - Read provider config + API key from SecretStorage
+- `generateFix()` - Send code + issue context to AI, return fixed content
+- `testConnection()` - Verify API key with a lightweight request
+- `buildFixPrompt()` - Construct system + user prompts for the AI
+
+### fixTracker.ts (Issue Status Persistence)
+**Responsibilities:**
+- Track fix status per issue (pending, fixed, ignored, fix-failed)
+- Persist status across VS Code restarts via workspaceState
+- Provide summary statistics for UI progress display
+
+**Key Functions:**
+- `makeKey()` - Generate deterministic issue identity from file:code:line:pattern
+- `markFixed()` / `markIgnored()` / `markFixFailed()` - Status transitions
+- `getSummary()` - Aggregate counts for progress bar
+- `onDidChange` - Event emitter for reactive UI updates
+
+### aiSettingsPanel.ts (AI Configuration UI)
+**Responsibilities:**
+- Webview panel for configuring AI provider and API key
+- Connection testing
+- Secure key management (save/clear via SecretStorage)
+
+**Key Functions:**
+- `show()` - Open or reveal the settings panel
+- Message handlers: saveKey, clearKey, setProvider, setModel, testConnection
 
 ## Security Rule Structure
 
@@ -315,11 +358,18 @@ Create `src/customRules.ts` to load external rule definitions
 
 ## File Size & Performance
 
-- `analyzer.ts`: ~800 lines (16 rules)
-- `extension.ts`: ~200 lines (main logic)
-- `diagnosticsManager.ts`: ~100 lines
-- `configManager.ts`: ~90 lines
-- **Total**: ~1200 lines of TypeScript
+- `analyzer.ts`: ~100 lines (rule engine)
+- `extension.ts`: ~900 lines (main logic + AI fix workflow)
+- `resultsPanel.ts`: ~810 lines (webview UI)
+- `resultsStore.ts`: ~180 lines (results storage)
+- `aiFixService.ts`: ~280 lines (AI provider abstraction)
+- `fixTracker.ts`: ~150 lines (issue status persistence)
+- `aiSettingsPanel.ts`: ~300 lines (settings webview)
+- `diagnosticsManager.ts`: ~60 lines
+- `configManager.ts`: ~150 lines
+- `statusBarManager.ts`: ~85 lines
+- `rules/`: ~14 files with 133+ security rules
+- **Total**: ~3000+ lines of TypeScript
 
 **Memory usage**: ~5-10 MB
 **Analysis time**: ~50-200ms per file (language dependent)

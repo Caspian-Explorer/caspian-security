@@ -124,6 +124,22 @@ export class ConfigManager {
     return this.config.get('includeDependencyCheck', true);
   }
 
+  getAIProvider(): string {
+    return this.config.get('aiProvider', 'anthropic');
+  }
+
+  setAIProvider(provider: string): void {
+    this.config.update('aiProvider', provider, vscode.ConfigurationTarget.Global);
+  }
+
+  getAIModel(): string {
+    return this.config.get('aiModel', '');
+  }
+
+  setAIModel(model: string): void {
+    this.config.update('aiModel', model, vscode.ConfigurationTarget.Global);
+  }
+
   resetToDefaults(): void {
     this.config.update('autoCheck', true, vscode.ConfigurationTarget.Global);
     this.config.update('checkOnSave', true, vscode.ConfigurationTarget.Global);

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ResultsStore } from './resultsStore';
+import { FixTracker } from './fixTracker';
 
 export enum ScanState {
   Idle = 'idle',
@@ -11,7 +12,10 @@ export class StatusBarManager implements vscode.Disposable {
   private statusBarItem: vscode.StatusBarItem;
   private state: ScanState = ScanState.Idle;
 
-  constructor(private resultsStore: ResultsStore) {
+  constructor(
+    private resultsStore: ResultsStore,
+    private fixTracker?: FixTracker
+  ) {
     this.statusBarItem = vscode.window.createStatusBarItem(
       vscode.StatusBarAlignment.Left,
       100
@@ -25,6 +29,14 @@ export class StatusBarManager implements vscode.Disposable {
         this.updateIssueCount();
       }
     });
+
+    if (this.fixTracker) {
+      this.fixTracker.onDidChange(() => {
+        if (this.state === ScanState.Complete) {
+          this.updateIssueCount();
+        }
+      });
+    }
   }
 
   setState(state: ScanState): void {
@@ -64,9 +76,14 @@ export class StatusBarManager implements vscode.Disposable {
 
   updateIssueCount(): void {
     const count = this.resultsStore.getTotalIssueCount();
+    const fixSummary = this.fixTracker?.getSummary();
+    const fixInfo = fixSummary && fixSummary.total > 0
+      ? ` (${fixSummary.fixed} fixed, ${fixSummary.ignored} ignored)`
+      : '';
+
     if (count > 0) {
-      this.statusBarItem.text = `$(warning) Caspian: ${count} issue${count !== 1 ? 's' : ''}`;
-      this.statusBarItem.tooltip = `Caspian Security - ${count} issue(s) found. Click to view.`;
+      this.statusBarItem.text = `$(warning) Caspian: ${count} issue${count !== 1 ? 's' : ''}${fixInfo}`;
+      this.statusBarItem.tooltip = `Caspian Security - ${count} issue(s) found${fixInfo}. Click to view.`;
       this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
     } else {
       this.statusBarItem.text = '$(check) Caspian: No issues';

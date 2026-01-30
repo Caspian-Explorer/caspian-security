@@ -4,6 +4,33 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [5.0.0] - 2026-01-30
+
+### Added
+
+- **AI-Powered Fix Generation** -- click "AI Fix" on any security issue to generate and apply a fix using Claude, GPT-4, or Gemini
+- **Issue Status Tracking** -- mark issues as fixed, ignored, or pending; status persists across VS Code restarts via workspaceState
+- **Fix Progress Bar** -- results panel shows resolved count (e.g., "35/120 resolved (28 fixed, 7 ignored)")
+- **Diff Preview** -- review AI-generated fixes side-by-side before applying; confirm or cancel
+- **Post-Fix Verification** -- after applying a fix, the file is re-scanned to verify the issue is resolved
+- **AI Settings Panel** -- dedicated webview to configure AI provider, model, and API key with connection testing
+- **Secure API Key Storage** -- keys stored in VS Code SecretStorage (OS keychain), never in settings.json
+- **3 AI Provider Support** -- Anthropic Claude, OpenAI GPT-4, and Google Gemini with provider-specific API handling
+- **Fix Status Filter** -- filter results panel by status: All, Pending, Fixed, Ignored, Fix Failed
+- **Status Bar Fix Info** -- status bar shows fix/ignore counts alongside issue count
+- New commands: "Configure AI Fix Provider", "Fix Issue with AI", "Ignore Issue", "Reset Fix Tracker"
+- New settings: `caspianSecurity.aiProvider` (anthropic/openai/gemini), `caspianSecurity.aiModel` (optional override)
+- New files: `src/aiFixService.ts`, `src/fixTracker.ts`, `src/aiSettingsPanel.ts`
+
+### Changed
+
+- "Show Fix Suggestion" command upgraded to "Fix Issue (AI or Suggestion)" -- now attempts AI fix when configured, falls back to text suggestion
+- Results panel table now includes an Actions column with per-issue AI Fix/Ignore buttons
+- Fixed and ignored issues are visually dimmed in the results table
+- Results panel header now includes "AI Settings" button
+
+---
+
 ## [4.3.0] - 2026-01-29
 
 ### Added
