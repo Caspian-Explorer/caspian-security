@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/Caspian-Explorer/caspian-security"
   },
-  "version": "4.3.0",
+  "version": "5.0.0",
   "publisher": "CaspianTools",
   "license": "MIT",
   "engines": {
@@ -64,7 +64,23 @@
       },
       {
         "command": "caspian-security.fixIssue",
-        "title": "Caspian Security: Show Fix Suggestion"
+        "title": "Caspian Security: Fix Issue (AI or Suggestion)"
+      },
+      {
+        "command": "caspian-security.openAISettings",
+        "title": "Caspian Security: Configure AI Fix Provider"
+      },
+      {
+        "command": "caspian-security.aiFixIssue",
+        "title": "Caspian Security: Fix Issue with AI"
+      },
+      {
+        "command": "caspian-security.ignoreIssue",
+        "title": "Caspian Security: Ignore Issue"
+      },
+      {
+        "command": "caspian-security.resetFixTracker",
+        "title": "Caspian Security: Reset Fix Tracker"
       },
       {
         "command": "caspian-security.check-auth-access-control",
@@ -159,6 +175,14 @@
         {
           "command": "caspian-security.exportCSV",
           "when": "caspian-security.hasResults"
+        },
+        {
+          "command": "caspian-security.aiFixIssue",
+          "when": "false"
+        },
+        {
+          "command": "caspian-security.ignoreIssue",
+          "when": "false"
         }
       ]
     },
@@ -273,6 +297,26 @@
           "type": "boolean",
           "default": true,
           "description": "Include dependency update and vulnerability checks during workspace scans"
+        },
+        "caspianSecurity.aiProvider": {
+          "type": "string",
+          "enum": [
+            "anthropic",
+            "openai",
+            "gemini"
+          ],
+          "default": "anthropic",
+          "description": "AI provider for security fix generation",
+          "enumDescriptions": [
+            "Anthropic Claude (recommended)",
+            "OpenAI GPT-4",
+            "Google Gemini"
+          ]
+        },
+        "caspianSecurity.aiModel": {
+          "type": "string",
+          "default": "",
+          "description": "Optional model override (leave empty for provider default: Claude claude-sonnet-4-20250514, OpenAI gpt-4o, Gemini gemini-2.0-flash)"
         }
       }
     }
