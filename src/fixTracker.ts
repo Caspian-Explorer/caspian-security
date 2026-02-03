@@ -5,6 +5,7 @@ export enum FixStatus {
   Fixed = 'fixed',
   Ignored = 'ignored',
   FixFailed = 'fix-failed',
+  Verified = 'verified',
 }
 
 export interface FixRecord {
@@ -17,6 +18,7 @@ export interface FixRecord {
   status: FixStatus;
   fixedAt?: string;
   ignoredAt?: string;
+  verifiedAt?: string;
   aiExplanation?: string;
   aiProvider?: string;
 }
@@ -27,6 +29,7 @@ export interface FixTrackerSummary {
   fixed: number;
   ignored: number;
   fixFailed: number;
+  verified: number;
 }
 
 const STORAGE_KEY = 'caspianSecurity.fixTracker';
@@ -109,6 +112,28 @@ export class FixTracker implements vscode.Disposable {
     }
   }
 
+  markVerified(
+    key: string,
+    filePath: string,
+    relativePath: string,
+    code: string,
+    line: number,
+    pattern: string
+  ): void {
+    this.records.set(key, {
+      issueKey: key,
+      filePath,
+      relativePath,
+      issueCode: code,
+      issueLine: line,
+      issuePattern: pattern,
+      status: FixStatus.Verified,
+      verifiedAt: new Date().toISOString(),
+    });
+    this.save();
+    this._onDidChange.fire();
+  }
+
   resetStatus(key: string): void {
     this.records.delete(key);
     this.save();
@@ -126,6 +151,7 @@ export class FixTracker implements vscode.Disposable {
     let fixed = 0;
     let ignored = 0;
     let fixFailed = 0;
+    let verified = 0;
     for (const r of this.records.values()) {
       switch (r.status) {
         case FixStatus.Fixed:
@@ -137,12 +163,15 @@ export class FixTracker implements vscode.Disposable {
         case FixStatus.FixFailed:
           fixFailed++;
           break;
+        case FixStatus.Verified:
+          verified++;
+          break;
         default:
           pending++;
           break;
       }
     }
-    return { total: this.records.size, pending, fixed, ignored, fixFailed };
+    return { total: this.records.size, pending, fixed, ignored, fixFailed, verified };
   }
 
   getAllRecords(): FixRecord[] {
