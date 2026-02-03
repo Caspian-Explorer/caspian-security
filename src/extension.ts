@@ -281,6 +281,43 @@ function registerCommands(context: vscode.ExtensionContext) {
     })
   );
 
+  // Verify issue (re-scan file and check if issue is resolved)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.verifyIssue', async (issueData: {
+      filePath: string; relativePath: string; line: number; code: string; pattern: string;
+    }) => {
+      const key = FixTracker.makeKey(issueData.relativePath, issueData.code, issueData.line, issueData.pattern);
+
+      try {
+        // Re-scan just this file
+        const uri = vscode.Uri.file(issueData.filePath);
+        const document = await vscode.workspace.openTextDocument(uri);
+        await checkDocument(document);
+
+        // Check if the specific issue still exists
+        const updatedResults = resultsStore.getFileResults(uri.toString());
+        const stillPresent = updatedResults?.issues.some(
+          i => i.code === issueData.code && i.line === issueData.line
+        );
+
+        if (stillPresent) {
+          vscode.window.showWarningMessage(
+            `Issue ${issueData.code} is still present at line ${issueData.line + 1}.`
+          );
+        } else {
+          // Mark as verified
+          fixTracker.markVerified(key, issueData.filePath, issueData.relativePath,
+            issueData.code, issueData.line, issueData.pattern);
+          vscode.window.showInformationMessage(
+            `Issue ${issueData.code} verified as resolved.`
+          );
+        }
+      } catch (error) {
+        vscode.window.showErrorMessage(`Verification failed: ${error}`);
+      }
+    })
+  );
+
   // Reset fix tracker
   context.subscriptions.push(
     vscode.commands.registerCommand('caspian-security.resetFixTracker', () => {

@@ -111,7 +111,7 @@ export class ResultsPanel implements vscode.Disposable {
     );
 
     const summary = this.resultsStore.getSummary();
-    const fixSummary = this.fixTracker?.getSummary() ?? { total: 0, pending: 0, fixed: 0, ignored: 0, fixFailed: 0 };
+    const fixSummary = this.fixTracker?.getSummary() ?? { total: 0, pending: 0, fixed: 0, ignored: 0, fixFailed: 0, verified: 0 };
 
     const projectAdvisories = this.resultsStore.getProjectAdvisories().map(a => ({
       code: a.code,
@@ -187,6 +187,10 @@ export class ResultsPanel implements vscode.Disposable {
       }
       case 'openAISettings': {
         await vscode.commands.executeCommand('caspian-security.openAISettings');
+        break;
+      }
+      case 'verifyIssue': {
+        await vscode.commands.executeCommand('caspian-security.verifyIssue', message.issueData);
         break;
       }
     }
@@ -465,6 +469,18 @@ export class ResultsPanel implements vscode.Disposable {
     .status-fixed { color: #4caf50; font-weight: 600; font-size: 11px; }
     .status-ignored { color: var(--vscode-descriptionForeground); font-size: 11px; }
     .status-failed { color: var(--vscode-errorForeground, #f44336); font-size: 11px; }
+    .status-verified { color: #4caf50; font-weight: 600; font-size: 11px; }
+    .btn-verify {
+      background: #4caf50;
+      color: white;
+      border: none;
+      padding: 2px 8px;
+      cursor: pointer;
+      font-size: 11px;
+      border-radius: 2px;
+      margin-right: 4px;
+    }
+    .btn-verify:hover { background: #45a049; }
 
     tr.issue-row.row-fixed { opacity: 0.6; }
     tr.issue-row.row-ignored { opacity: 0.5; }
@@ -517,6 +533,7 @@ export class ResultsPanel implements vscode.Disposable {
         <option value="all">All</option>
         <option value="pending">Pending</option>
         <option value="fixed">Fixed</option>
+        <option value="verified">Verified</option>
         <option value="ignored">Ignored</option>
         <option value="fix-failed">Fix Failed</option>
       </select>
@@ -713,8 +730,11 @@ export class ResultsPanel implements vscode.Disposable {
   }
 
   function renderActionsCell(item) {
+    if (item.fixStatus === 'verified') {
+      return '<span class="status-verified">Verified ✓</span> <button class="btn-reset" data-key="' + escapeAttr(item.issueKey) + '">reset</button>';
+    }
     if (item.fixStatus === 'fixed') {
-      return '<span class="status-fixed">Fixed</span> <button class="btn-reset" data-key="' + escapeAttr(item.issueKey) + '">reset</button>';
+      return '<span class="status-fixed">Fixed</span> <button class="btn-verify" data-key="' + escapeAttr(item.issueKey) + '">Verify</button> <button class="btn-reset" data-key="' + escapeAttr(item.issueKey) + '">reset</button>';
     }
     if (item.fixStatus === 'ignored') {
       return '<span class="status-ignored">Ignored</span> <button class="btn-reset" data-key="' + escapeAttr(item.issueKey) + '">reset</button>';
@@ -724,6 +744,7 @@ export class ResultsPanel implements vscode.Disposable {
     }
     // pending
     return '<button class="btn-fix" data-key="' + escapeAttr(item.issueKey) + '">AI Fix</button>'
+      + '<button class="btn-verify" data-key="' + escapeAttr(item.issueKey) + '">Verify</button>'
       + '<button class="btn-ignore" data-key="' + escapeAttr(item.issueKey) + '">Ignore</button>';
   }
 
@@ -753,7 +774,7 @@ export class ResultsPanel implements vscode.Disposable {
     // Navigate on row click (but not on button clicks)
     resultsBody.querySelectorAll('tr.issue-row, tr.suggestion-row').forEach(row => {
       row.addEventListener('click', (e) => {
-        if (e.target.closest('.btn-fix') || e.target.closest('.btn-ignore') || e.target.closest('.btn-reset')) return;
+        if (e.target.closest('.btn-fix') || e.target.closest('.btn-ignore') || e.target.closest('.btn-reset') || e.target.closest('.btn-verify')) return;
         const file = row.getAttribute('data-file');
         const line = parseInt(row.getAttribute('data-line'));
         const col = parseInt(row.getAttribute('data-col'));
@@ -810,6 +831,24 @@ export class ResultsPanel implements vscode.Disposable {
         vscode.postMessage({ type: 'resetIssueStatus', issueKey: key });
       });
     });
+
+    // Verify buttons
+    resultsBody.querySelectorAll('.btn-verify').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const key = btn.getAttribute('data-key');
+        const item = findItemByKey(key);
+        if (item) {
+          vscode.postMessage({
+            type: 'verifyIssue',
+            issueData: {
+              filePath: item.filePath, relativePath: item.relativePath,
+              line: item.line, code: item.code, pattern: item.pattern,
+            }
+          });
+        }
+      });
+    });
   }
 
   function findItemByKey(key) {
@@ -848,12 +887,14 @@ export class ResultsPanel implements vscode.Disposable {
       return;
     }
     el.style.display = 'flex';
-    const resolved = fixSummary.fixed + fixSummary.ignored;
+    const resolved = fixSummary.fixed + fixSummary.ignored + (fixSummary.verified || 0);
     const total = allResults.length || fixSummary.total;
     const pct = total > 0 ? Math.round((resolved / total) * 100) : 0;
     document.getElementById('fix-progress-fill').style.width = pct + '%';
     document.getElementById('fix-progress-text').textContent =
-      resolved + '/' + total + ' resolved (' + fixSummary.fixed + ' fixed, ' + fixSummary.ignored + ' ignored'
+      resolved + '/' + total + ' resolved (' + fixSummary.fixed + ' fixed'
+      + (fixSummary.verified > 0 ? ', ' + fixSummary.verified + ' verified' : '')
+      + ', ' + fixSummary.ignored + ' ignored'
       + (fixSummary.fixFailed > 0 ? ', ' + fixSummary.fixFailed + ' failed' : '')
       + ')';
   }
