@@ -40,7 +40,7 @@ export const dependenciesRules: SecurityRule[] = [
     ],
     suggestion: 'Subscribe to security advisories (GitHub Dependabot, Snyk, npm audit) and apply critical patches within 48 hours. Define an SLA for patch response times',
     category: SecurityCategory.DependenciesSupplyChain,
-    ruleType: RuleType.Informational,
+    ruleType: RuleType.ProjectAdvisory,
   },
   {
     code: 'DEP004',
@@ -53,7 +53,7 @@ export const dependenciesRules: SecurityRule[] = [
     ],
     suggestion: 'Run dependency audit tools (npm audit, pip-audit, snyk test, cargo audit) at least weekly in CI/CD. Fail builds on critical or high severity vulnerabilities',
     category: SecurityCategory.DependenciesSupplyChain,
-    ruleType: RuleType.Informational,
+    ruleType: RuleType.ProjectAdvisory,
   },
   {
     code: 'DEP005',
@@ -66,7 +66,7 @@ export const dependenciesRules: SecurityRule[] = [
     ],
     suggestion: 'Integrate vulnerability scanning into CI/CD (Snyk, npm audit, OWASP Dependency-Check). Track and remediate all known CVEs in your dependency tree',
     category: SecurityCategory.DependenciesSupplyChain,
-    ruleType: RuleType.Informational,
+    ruleType: RuleType.ProjectAdvisory,
   },
   {
     code: 'DEP006',
@@ -79,6 +79,6 @@ export const dependenciesRules: SecurityRule[] = [
     ],
     suggestion: 'Use tools that scan the full dependency tree including transitive dependencies (npm audit, snyk, pip-audit). Review lock files (package-lock.json, yarn.lock) for unexpected transitive packages',
     category: SecurityCategory.DependenciesSupplyChain,
-    ruleType: RuleType.Informational,
+    ruleType: RuleType.ProjectAdvisory,
   },
 ];

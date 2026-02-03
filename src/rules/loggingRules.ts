@@ -79,7 +79,7 @@ export const loggingRules: SecurityRule[] = [
     ],
     suggestion: 'Store logs in encrypted storage; use centralized logging (e.g., ELK, CloudWatch, Datadog) with encryption at rest',
     category: SecurityCategory.LoggingMonitoring,
-    ruleType: RuleType.Informational,
+    ruleType: RuleType.ProjectAdvisory,
   },
   {
     code: 'LOG008',
@@ -90,7 +90,7 @@ export const loggingRules: SecurityRule[] = [
     ],
     suggestion: 'Restrict log file access to admin/security team only; use IAM policies for cloud log services; set file permissions to 0600',
     category: SecurityCategory.LoggingMonitoring,
-    ruleType: RuleType.Informational,
+    ruleType: RuleType.ProjectAdvisory,
   },
   {
     code: 'LOG009',

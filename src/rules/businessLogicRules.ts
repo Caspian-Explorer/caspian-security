@@ -4,7 +4,7 @@ export const businessLogicRules: SecurityRule[] = [
   {
     code: 'BIZ001',
     message: 'Premium/paid feature check may be client-side only',
-    severity: SecuritySeverity.Error,
+    severity: SecuritySeverity.Warning,
     patterns: [
       /(?:isPremium|isPro|isSubscribed|hasPlan|planType)\s*(?:&&|\?)/i,
       /(?:premium|subscription|plan)\s*[:=]\s*(?:true|false)/i,
@@ -12,6 +12,9 @@ export const businessLogicRules: SecurityRule[] = [
     suggestion: 'Enforce premium/subscription checks SERVER-SIDE; never trust client-side feature flags for paid features',
     category: SecurityCategory.BusinessLogicPayment,
     ruleType: RuleType.Informational,
+    filePatterns: {
+      reduceSeverityIn: [/\.tsx$/i, /\.jsx$/i, /components?\//i, /pages?\//i, /views?\//i, /hooks?\//i],
+    },
   },
   {
     code: 'BIZ002',
