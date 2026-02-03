@@ -4,6 +4,54 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [6.1.0] - 2026-02-03
+
+### Added
+
+- **Verify Button** -- manually verify if an issue has been resolved by re-scanning just that file
+- **Verified Status** -- new fix status that confirms an issue is truly resolved (distinct from AI-fixed)
+- Verify button appears on both Pending and Fixed issues in the results panel
+- Progress bar now includes verified count in resolved total (e.g., "40/120 resolved (28 fixed, 5 verified, 7 ignored)")
+- New command: "Caspian Security: Verify Issue Resolution"
+
+### Changed
+
+- Status filter dropdown now includes "Verified" option
+
+---
+
+## [6.0.0] - 2026-02-03
+
+### Added
+
+- **Context-Aware Analysis** -- rules can now detect if matches are inside comments, string literals, or JSX text and suppress false positives
+- **Project Advisories** -- informational rules converted to project-level advisories that fire once per scan instead of per-line
+- **Negative Patterns** -- rules can specify patterns that suppress matches (e.g., DB001 won't fire if parameterized queries are nearby)
+- **Suppress-If-Nearby** -- rules can be suppressed when related safe patterns exist within N lines
+- **File Pattern Filtering** -- rules can target specific file patterns (e.g., BIZ001 only fires in payment-related files)
+- **.gitignore Check** -- CRED007a advisory warns if .env and other sensitive files aren't in .gitignore
+- New `RuleType` enum: `CodeDetectable`, `Informational`, `ProjectAdvisory`
+- New rule properties: `contextAware`, `negativePatterns`, `suppressIfNearby`, `filePatterns`
+
+### Changed
+
+- **DB001** (SQL Injection) -- now context-aware, won't flag string concatenation inside comments or when parameterized queries are nearby
+- **FE001** (innerHTML) -- now context-aware, suppresses when DOMPurify.sanitize is nearby
+- **FE003** (postMessage origin) -- now context-aware, won't flag inside comments
+- **ENC005** (Weak Randomness) -- severity reduced from Error to Warning, more appropriate for non-cryptographic uses
+- **BIZ001** (Premium Bypass) -- now only fires in payment/subscription-related files
+- **CRED007** (.env Detection) -- split into code detection and project advisory for .gitignore check
+- **DEP003-DEP006**, **ENC008** -- converted from per-line informational to project advisories
+- **LOG004-LOG009** -- converted to project advisories (fire once per scan, not per file)
+
+### Fixed
+
+- False positives from SQL keywords in comments or documentation strings
+- False positives from innerHTML in JSX text content
+- Generic reminders appearing on arbitrary lines throughout codebase
+
+---
+
 ## [5.0.0] - 2026-01-30
 
 ### Added
