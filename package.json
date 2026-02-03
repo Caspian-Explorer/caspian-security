@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/Caspian-Explorer/caspian-security"
   },
-  "version": "5.1.0",
+  "version": "6.1.0",
   "publisher": "CaspianTools",
   "license": "MIT",
   "engines": {
@@ -81,6 +81,10 @@
       {
         "command": "caspian-security.resetFixTracker",
         "title": "Caspian Security: Reset Fix Tracker"
+      },
+      {
+        "command": "caspian-security.verifyIssue",
+        "title": "Caspian Security: Verify Issue Resolution"
       },
       {
         "command": "caspian-security.check-auth-access-control",
@@ -182,6 +186,10 @@
         },
         {
           "command": "caspian-security.ignoreIssue",
+          "when": "false"
+        },
+        {
+          "command": "caspian-security.verifyIssue",
           "when": "false"
         }
       ]
