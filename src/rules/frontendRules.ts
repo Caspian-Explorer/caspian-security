@@ -14,6 +14,7 @@ export const frontendRules: SecurityRule[] = [
     suggestion: 'Avoid eval(), new Function(), and string arguments to setTimeout/setInterval',
     category: SecurityCategory.FrontendSecurity,
     ruleType: RuleType.CodeDetectable,
+    contextAware: true,
   },
   {
     code: 'FE002',
@@ -33,6 +34,7 @@ export const frontendRules: SecurityRule[] = [
     patterns: [
       /target\s*=\s*['"]_blank['"]/i,
     ],
+    suppressIfNearby: [/rel\s*=\s*['"][^'"]*noopener[^'"]*noreferrer[^'"]*['"]/i, /rel\s*=\s*['"][^'"]*noreferrer[^'"]*noopener[^'"]*['"]/i],
     suggestion: 'Add rel="noopener noreferrer" to links with target="_blank" to prevent tab-nabbing',
     category: SecurityCategory.FrontendSecurity,
     ruleType: RuleType.Informational,

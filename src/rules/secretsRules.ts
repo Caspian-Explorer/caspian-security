@@ -77,7 +77,7 @@ export const secretsRules: SecurityRule[] = [
   {
     code: 'CRED007',
     message: 'Sensitive file reference detected - ensure it is in .gitignore',
-    severity: SecuritySeverity.Warning,
+    severity: SecuritySeverity.Info,
     patterns: [
       /\.env\b/,
       /credentials\.json/,
@@ -88,6 +88,15 @@ export const secretsRules: SecurityRule[] = [
     ruleType: RuleType.Informational,
   },
   {
+    code: 'CRED007a',
+    message: '.gitignore is missing entries for sensitive files (.env, credentials)',
+    severity: SecuritySeverity.Warning,
+    patterns: [],
+    suggestion: 'Add .env, .env.*, credentials.json, and private key files to .gitignore to prevent accidental commits',
+    category: SecurityCategory.SecretsCredentials,
+    ruleType: RuleType.CodeDetectable,
+  },
+  {
     code: 'CRED008',
     message: 'Reminder: Rotate secrets regularly and audit access',
     severity: SecuritySeverity.Info,
@@ -96,7 +105,7 @@ export const secretsRules: SecurityRule[] = [
     ],
     suggestion: 'Implement a secret rotation policy; audit who and what has access to secrets',
     category: SecurityCategory.SecretsCredentials,
-    ruleType: RuleType.Informational,
+    ruleType: RuleType.ProjectAdvisory,
   },
   {
     code: 'CRED009',
@@ -109,6 +118,6 @@ export const secretsRules: SecurityRule[] = [
     ],
     suggestion: 'Use tools like git-secrets, truffleHog, or gitleaks to scan commit history for accidentally committed secrets. If found, rotate the secret immediately and use git filter-branch or BFG Repo-Cleaner to purge from history',
     category: SecurityCategory.SecretsCredentials,
-    ruleType: RuleType.Informational,
+    ruleType: RuleType.ProjectAdvisory,
   },
 ];

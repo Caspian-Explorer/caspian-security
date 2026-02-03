@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { SecurityAnalyzer } from './analyzer';
 import { DiagnosticsManager } from './diagnosticsManager';
 import { ConfigManager, LANGUAGE_EXTENSIONS } from './configManager';
-import { SecurityCategory, SecuritySeverity, CATEGORY_LABELS } from './types';
+import { SecurityCategory, SecuritySeverity, CATEGORY_LABELS, ProjectAdvisory } from './types';
 import { ResultsStore } from './resultsStore';
 import { StatusBarManager, ScanState } from './statusBarManager';
 import { ResultsPanel } from './resultsPanel';
@@ -613,13 +614,37 @@ async function runWorkspaceCheck() {
     }
   }
 
+  // Collect project-level advisories from scanned files
+  const allAdvisories: ProjectAdvisory[] = [];
+  const advisoryFired = new Set<string>();
+  for (const result of resultsStore.getAllResults()) {
+    try {
+      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(result.filePath));
+      const categories = configManager.getEnabledCategories();
+      const fileAdvisories = analyzer.collectProjectAdvisories(doc, categories);
+      for (const advisory of fileAdvisories) {
+        if (!advisoryFired.has(advisory.code)) {
+          advisoryFired.add(advisory.code);
+          allAdvisories.push(advisory);
+        }
+      }
+    } catch {
+      // File may be unavailable
+    }
+  }
+  resultsStore.setProjectAdvisories(allAdvisories);
+
+  // CRED007a: Check .gitignore for .env entries
+  checkGitignoreForSensitiveFiles();
+
   const duration = Date.now() - startTime;
   resultsStore.setScanMeta(duration, userStopped ? 'workspace (partial)' : 'workspace');
   statusBarManager.showComplete();
   updateHasResultsContext();
 
+  const advisoryNote = allAdvisories.length > 0 ? ` + ${allAdvisories.length} advisory(ies)` : '';
   vscode.window.showInformationMessage(
-    `Caspian Security: Scan ${userStopped ? 'stopped' : 'complete'} — ${totalIssueCount} issue(s) found in ${totalFilesScanned} files`
+    `Caspian Security: Scan ${userStopped ? 'stopped' : 'complete'} — ${totalIssueCount} issue(s) found in ${totalFilesScanned} files${advisoryNote}`
   );
 
   resultsPanel.show();
@@ -697,6 +722,29 @@ async function runUncommittedCheck() {
       }
     }
   );
+
+  // Collect project-level advisories from scanned files
+  const uncommittedAdvisories: ProjectAdvisory[] = [];
+  const uncommittedAdvisoryFired = new Set<string>();
+  for (const result of resultsStore.getAllResults()) {
+    try {
+      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(result.filePath));
+      const categories = configManager.getEnabledCategories();
+      const fileAdvisories = analyzer.collectProjectAdvisories(doc, categories);
+      for (const advisory of fileAdvisories) {
+        if (!uncommittedAdvisoryFired.has(advisory.code)) {
+          uncommittedAdvisoryFired.add(advisory.code);
+          uncommittedAdvisories.push(advisory);
+        }
+      }
+    } catch {
+      // File may be unavailable
+    }
+  }
+  resultsStore.setProjectAdvisories(uncommittedAdvisories);
+
+  // CRED007a: Check .gitignore for .env entries
+  checkGitignoreForSensitiveFiles();
 
   const duration = Date.now() - startTime;
   resultsStore.setScanMeta(duration, 'uncommitted');
@@ -813,6 +861,66 @@ function mapAuditSeverity(severity: string): import('./types').SecuritySeverity 
       return SecuritySeverity.Warning;
     default:
       return SecuritySeverity.Info;
+  }
+}
+
+function checkGitignoreForSensitiveFiles(): void {
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!workspaceRoot) { return; }
+
+  const gitignorePath = path.join(workspaceRoot, '.gitignore');
+  const sensitivePatterns = ['.env', 'credentials.json', 'serviceAccountKey'];
+  const missingPatterns: string[] = [];
+
+  if (fs.existsSync(gitignorePath)) {
+    try {
+      const content = fs.readFileSync(gitignorePath, 'utf-8');
+      const lines = content.split('\n').map(l => l.trim());
+
+      for (const pattern of sensitivePatterns) {
+        // Check if any gitignore line covers this pattern
+        const isCovered = lines.some(line => {
+          if (line.startsWith('#') || line === '') { return false; }
+          // Direct match or glob match
+          return line === pattern || line === `${pattern}*` || line === `${pattern}.*`
+            || line === `*${pattern}` || line === `**/${pattern}`
+            || line.includes(pattern);
+        });
+        if (!isCovered) {
+          missingPatterns.push(pattern);
+        }
+      }
+    } catch {
+      // Can't read .gitignore
+      return;
+    }
+  } else {
+    // No .gitignore at all
+    missingPatterns.push(...sensitivePatterns);
+  }
+
+  if (missingPatterns.length > 0) {
+    const issues: import('./types').SecurityIssue[] = [{
+      line: 0,
+      column: 0,
+      message: `.gitignore is missing entries for sensitive files: ${missingPatterns.join(', ')}`,
+      severity: SecuritySeverity.Warning,
+      suggestion: `Add ${missingPatterns.join(', ')} to .gitignore to prevent accidental commits of sensitive data`,
+      code: 'CRED007a',
+      pattern: missingPatterns.join(', '),
+      category: SecurityCategory.SecretsCredentials,
+    }];
+
+    const targetPath = fs.existsSync(gitignorePath) ? gitignorePath : path.join(workspaceRoot, '.gitignore (missing)');
+    const relativePath = fs.existsSync(gitignorePath) ? '.gitignore' : '.gitignore (missing)';
+
+    resultsStore.setFileResults(`gitignore-check:${gitignorePath}`, {
+      filePath: targetPath,
+      relativePath,
+      languageId: 'ignore',
+      issues,
+      scannedAt: new Date(),
+    });
   }
 }
 

@@ -24,6 +24,7 @@ export enum SecurityCategory {
 export enum RuleType {
   CodeDetectable = 'code-detectable',
   Informational = 'informational',
+  ProjectAdvisory = 'project-advisory',
 }
 
 export interface SecurityRule {
@@ -34,6 +35,14 @@ export interface SecurityRule {
   suggestion: string;
   category: SecurityCategory;
   ruleType: RuleType;
+  contextAware?: boolean;
+  negativePatterns?: (RegExp | string)[];
+  suppressIfNearby?: RegExp[];
+  filePatterns?: {
+    include?: RegExp[];
+    exclude?: RegExp[];
+    reduceSeverityIn?: RegExp[];
+  };
 }
 
 export interface SecurityIssue {
@@ -45,6 +54,14 @@ export interface SecurityIssue {
   code: string;
   pattern: string;
   category: SecurityCategory;
+}
+
+export interface ProjectAdvisory {
+  code: string;
+  message: string;
+  suggestion: string;
+  category: SecurityCategory;
+  triggeredBy: string;
 }
 
 export const SEVERITY_LABELS: Record<SecuritySeverity, string> = {

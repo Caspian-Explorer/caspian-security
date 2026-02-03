@@ -63,6 +63,13 @@ export const encryptionRules: SecurityRule[] = [
     patterns: [
       /Math\.random\s*\(/,
     ],
+    negativePatterns: [
+      /(?:id|key|index|seed|color|opacity|position|width|height|left|top|zIndex|order|delay|duration)\s*[:=]/i,
+      /className/i,
+      /style\s*[:=]/i,
+      /animation/i,
+      /Math\.random\s*\(\s*\)\s*\.\s*toString/i,
+    ],
     suggestion: 'Use crypto.randomBytes(), crypto.randomUUID(), or secrets module for security-sensitive randomness',
     category: SecurityCategory.EncryptionDataProtection,
     ruleType: RuleType.CodeDetectable,
@@ -97,11 +104,19 @@ export const encryptionRules: SecurityRule[] = [
     message: 'Reminder: Ensure PII and sensitive fields are encrypted at rest',
     severity: SecuritySeverity.Info,
     patterns: [
-      /(?:ssn|social_security|credit.?card|date.?of.?birth|passport)/i,
+      /\b(?:ssn|social_security|credit.?card|date.?of.?birth|passport)\b/i,
+    ],
+    negativePatterns: [
+      /className/i,
+      /class\s*=/i,
+      /classList/i,
+      /css/i,
+      /style/i,
     ],
     suggestion: 'Encrypt sensitive PII fields at rest using application-level encryption or database encryption',
     category: SecurityCategory.EncryptionDataProtection,
     ruleType: RuleType.Informational,
+    contextAware: true,
   },
   {
     code: 'ENC009',
@@ -135,7 +150,7 @@ export const encryptionRules: SecurityRule[] = [
     ],
     suggestion: 'Encrypt all database backups at rest; use encrypted storage for backup files',
     category: SecurityCategory.EncryptionDataProtection,
-    ruleType: RuleType.Informational,
+    ruleType: RuleType.ProjectAdvisory,
   },
   {
     code: 'ENC012',
@@ -147,6 +162,6 @@ export const encryptionRules: SecurityRule[] = [
     ],
     suggestion: 'Implement user data export (GDPR Art. 20) and deletion on request (GDPR Art. 17); ensure all related records are purged',
     category: SecurityCategory.EncryptionDataProtection,
-    ruleType: RuleType.Informational,
+    ruleType: RuleType.ProjectAdvisory,
   },
 ];

@@ -78,7 +78,7 @@ export const infrastructureRules: SecurityRule[] = [
     ],
     suggestion: 'Mask or suppress secrets in CI/CD output. Use built-in secret masking features in GitHub Actions, GitLab CI, or your CI platform to prevent accidental exposure in build logs',
     category: SecurityCategory.InfrastructureDeployment,
-    ruleType: RuleType.Informational,
+    ruleType: RuleType.ProjectAdvisory,
   },
   {
     code: 'INFRA007',

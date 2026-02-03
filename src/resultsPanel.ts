@@ -113,9 +113,17 @@ export class ResultsPanel implements vscode.Disposable {
     const summary = this.resultsStore.getSummary();
     const fixSummary = this.fixTracker?.getSummary() ?? { total: 0, pending: 0, fixed: 0, ignored: 0, fixFailed: 0 };
 
+    const projectAdvisories = this.resultsStore.getProjectAdvisories().map(a => ({
+      code: a.code,
+      message: a.message,
+      suggestion: a.suggestion,
+      category: a.category,
+      categoryLabel: CATEGORY_LABELS[a.category],
+    }));
+
     this.panel.webview.postMessage({
       type: 'updateResults',
-      data: { results: serialized, summary, fixSummary },
+      data: { results: serialized, summary, fixSummary, projectAdvisories },
     });
   }
 
@@ -365,6 +373,60 @@ export class ResultsPanel implements vscode.Disposable {
     .empty-state h2 { font-size: 16px; margin-bottom: 8px; font-weight: 500; }
     .empty-state p { font-size: 13px; }
 
+    .advisories-section {
+      border-top: 2px solid var(--vscode-panel-border);
+      margin-top: 8px;
+      display: none;
+    }
+    .advisories-header {
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--vscode-descriptionForeground);
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .advisories-header:hover { color: var(--vscode-editor-foreground); }
+    .advisories-toggle { font-size: 10px; }
+    .advisories-badge {
+      background: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .advisories-list {
+      padding: 0 16px 12px 16px;
+    }
+    .advisory-item {
+      padding: 8px 12px;
+      margin-bottom: 4px;
+      background: var(--vscode-input-background);
+      border-radius: 4px;
+      border-left: 3px solid var(--vscode-editorInfo-foreground, #2196f3);
+    }
+    .advisory-code {
+      font-family: var(--vscode-editor-fontFamily, monospace);
+      font-weight: 600;
+      font-size: 11px;
+      color: var(--vscode-editorInfo-foreground, #2196f3);
+    }
+    .advisory-category {
+      font-size: 10px;
+      color: var(--vscode-descriptionForeground);
+      margin-left: 8px;
+    }
+    .advisory-message { font-size: 12px; margin-top: 2px; }
+    .advisory-suggestion {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      margin-top: 4px;
+    }
+
     .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
     .dot-error { background: var(--vscode-errorForeground, #f44336); }
     .dot-warning { background: var(--vscode-editorWarning-foreground, #ff9800); }
@@ -487,6 +549,15 @@ export class ResultsPanel implements vscode.Disposable {
     </div>
   </div>
 
+  <div class="advisories-section" id="advisories-section">
+    <div class="advisories-header" id="advisories-header">
+      <span class="advisories-toggle" id="advisories-toggle">&#9660;</span>
+      Security Best Practice Advisories
+      <span class="advisories-badge" id="advisories-count">0</span>
+    </div>
+    <div class="advisories-list" id="advisories-list"></div>
+  </div>
+
 <script nonce="${nonce}">
 (function() {
   const vscode = acquireVsCodeApi();
@@ -544,6 +615,15 @@ export class ResultsPanel implements vscode.Disposable {
     vscode.postMessage({ type: 'exportJSON' });
   });
 
+  // Advisories toggle
+  let advisoriesExpanded = true;
+  const advisoriesHeader = document.getElementById('advisories-header');
+  advisoriesHeader.addEventListener('click', () => {
+    advisoriesExpanded = !advisoriesExpanded;
+    document.getElementById('advisories-list').style.display = advisoriesExpanded ? 'block' : 'none';
+    document.getElementById('advisories-toggle').innerHTML = advisoriesExpanded ? '&#9660;' : '&#9654;';
+  });
+
   // Receive data from extension
   window.addEventListener('message', event => {
     const msg = event.data;
@@ -553,6 +633,7 @@ export class ResultsPanel implements vscode.Disposable {
       applyFilters();
       renderSummary(msg.data.summary);
       renderFixProgress(msg.data.fixSummary);
+      renderAdvisories(msg.data.projectAdvisories || []);
     }
   });
 
@@ -775,6 +856,29 @@ export class ResultsPanel implements vscode.Disposable {
       resolved + '/' + total + ' resolved (' + fixSummary.fixed + ' fixed, ' + fixSummary.ignored + ' ignored'
       + (fixSummary.fixFailed > 0 ? ', ' + fixSummary.fixFailed + ' failed' : '')
       + ')';
+  }
+
+  function renderAdvisories(advisories) {
+    const section = document.getElementById('advisories-section');
+    const list = document.getElementById('advisories-list');
+    const countBadge = document.getElementById('advisories-count');
+
+    if (!advisories || advisories.length === 0) {
+      section.style.display = 'none';
+      return;
+    }
+
+    section.style.display = 'block';
+    countBadge.textContent = advisories.length;
+
+    list.innerHTML = advisories.map(function(a) {
+      return '<div class="advisory-item">'
+        + '<span class="advisory-code">' + escapeHtml(a.code) + '</span>'
+        + '<span class="advisory-category">' + escapeHtml(a.categoryLabel) + '</span>'
+        + '<div class="advisory-message">' + escapeHtml(a.message) + '</div>'
+        + '<div class="advisory-suggestion">' + escapeHtml(a.suggestion) + '</div>'
+        + '</div>';
+    }).join('');
   }
 
   function escapeHtml(s) {

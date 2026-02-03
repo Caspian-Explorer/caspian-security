@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { SecurityIssue, SecuritySeverity, SecurityCategory, CATEGORY_LABELS, SEVERITY_LABELS } from './types';
+import { SecurityIssue, SecuritySeverity, SecurityCategory, CATEGORY_LABELS, SEVERITY_LABELS, ProjectAdvisory } from './types';
 
 export interface FileSecurityResult {
   filePath: string;
@@ -15,6 +15,7 @@ export interface ScanSummary {
   byCategory: Record<string, number>;
   bySeverity: Record<string, number>;
   byFile: { filePath: string; relativePath: string; count: number }[];
+  projectAdvisories: ProjectAdvisory[];
   scanDuration: number;
   scanType: string;
   timestamp: Date;
@@ -28,6 +29,7 @@ export class ResultsStore implements vscode.Disposable {
   private _scanDuration = 0;
   private _scanType = '';
   private _debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  private _projectAdvisories: ProjectAdvisory[] = [];
 
   setFileResults(uriString: string, result: FileSecurityResult): void {
     this.results.set(uriString, result);
@@ -57,12 +59,28 @@ export class ResultsStore implements vscode.Disposable {
 
   clearAll(): void {
     this.results.clear();
+    this._projectAdvisories = [];
     this._onDidChange.fire();
   }
 
   setScanMeta(duration: number, scanType: string): void {
     this._scanDuration = duration;
     this._scanType = scanType;
+  }
+
+  setProjectAdvisories(advisories: ProjectAdvisory[]): void {
+    // Deduplicate by code — keep only first occurrence of each advisory
+    const seen = new Set<string>();
+    this._projectAdvisories = advisories.filter(a => {
+      if (seen.has(a.code)) { return false; }
+      seen.add(a.code);
+      return true;
+    });
+    this._debouncedFire();
+  }
+
+  getProjectAdvisories(): ProjectAdvisory[] {
+    return this._projectAdvisories;
   }
 
   getTotalIssueCount(): number {
@@ -103,6 +121,7 @@ export class ResultsStore implements vscode.Disposable {
       byCategory,
       bySeverity,
       byFile,
+      projectAdvisories: this._projectAdvisories,
       scanDuration: this._scanDuration,
       scanType: this._scanType,
       timestamp: new Date(),
@@ -111,7 +130,7 @@ export class ResultsStore implements vscode.Disposable {
 
   toJSON(): string {
     const allResults = this.getAllResults();
-    const output = allResults.flatMap(result =>
+    const issues = allResults.flatMap(result =>
       result.issues.map(issue => ({
         file: result.relativePath,
         line: issue.line + 1,
@@ -124,7 +143,14 @@ export class ResultsStore implements vscode.Disposable {
         pattern: issue.pattern,
       }))
     );
-    return JSON.stringify(output, null, 2);
+    const advisories = this._projectAdvisories.map(a => ({
+      type: 'project-advisory',
+      code: a.code,
+      category: CATEGORY_LABELS[a.category],
+      message: a.message,
+      suggestion: a.suggestion,
+    }));
+    return JSON.stringify({ issues, projectAdvisories: advisories }, null, 2);
   }
 
   toCSV(): string {
@@ -157,6 +183,9 @@ export class ResultsStore implements vscode.Disposable {
     lines.push(`Caspian Security Scan Results`);
     lines.push(`${'='.repeat(50)}`);
     lines.push(`Total: ${summary.totalIssues} issue(s) in ${summary.totalFiles} file(s)`);
+    if (this._projectAdvisories.length > 0) {
+      lines.push(`Project Advisories: ${this._projectAdvisories.length}`);
+    }
     lines.push('');
 
     for (const result of this.results.values()) {
@@ -166,6 +195,18 @@ export class ResultsStore implements vscode.Disposable {
         const sev = SEVERITY_LABELS[issue.severity];
         lines.push(`  [${sev}] ${issue.code} (Line ${issue.line + 1}): ${issue.message}`);
         lines.push(`    Suggestion: ${issue.suggestion}`);
+      }
+      lines.push('');
+    }
+
+    if (this._projectAdvisories.length > 0) {
+      lines.push(`${'='.repeat(50)}`);
+      lines.push('Project-Level Security Advisories');
+      lines.push(`${'-'.repeat(50)}`);
+      for (const advisory of this._projectAdvisories) {
+        const catLabel = CATEGORY_LABELS[advisory.category] || advisory.category;
+        lines.push(`  [Advisory] ${advisory.code} [${catLabel}]: ${advisory.message}`);
+        lines.push(`    Suggestion: ${advisory.suggestion}`);
       }
       lines.push('');
     }
