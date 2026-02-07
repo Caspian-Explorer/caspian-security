@@ -155,6 +155,10 @@
         "title": "Caspian Security: Export Results to CSV"
       },
       {
+        "command": "caspian-security.exportSARIF",
+        "title": "Caspian Security: Export Results to SARIF"
+      },
+      {
         "command": "caspian-security.runCheckUncommitted",
         "title": "Caspian Security: Scan Uncommitted Files"
       },
@@ -178,6 +182,10 @@
         },
         {
           "command": "caspian-security.exportCSV",
+          "when": "caspian-security.hasResults"
+        },
+        {
+          "command": "caspian-security.exportSARIF",
           "when": "caspian-security.hasResults"
         },
         {

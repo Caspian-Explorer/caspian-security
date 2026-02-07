@@ -20,6 +20,7 @@ interface SerializedIssue {
   fixStatus: string;
   fixExplanation?: string;
   issueKey: string;
+  confidenceLevel?: string;
 }
 
 export class ResultsPanel implements vscode.Disposable {
@@ -106,6 +107,7 @@ export class ResultsPanel implements vscode.Disposable {
           fixStatus: record?.status ?? 'pending',
           fixExplanation: record?.aiExplanation,
           issueKey: key,
+          confidenceLevel: issue.confidenceLevel,
         };
       })
     );
@@ -168,6 +170,18 @@ export class ResultsPanel implements vscode.Disposable {
         if (uri) {
           fs.writeFileSync(uri.fsPath, json, 'utf-8');
           vscode.window.showInformationMessage(`Caspian Security: Results exported to ${uri.fsPath}`);
+        }
+        break;
+      }
+      case 'exportSARIF': {
+        const sarif = this.resultsStore.toSARIF();
+        const uri = await vscode.window.showSaveDialog({
+          defaultUri: vscode.Uri.file('caspian-security-results.sarif'),
+          filters: { 'SARIF Files': ['sarif'] },
+        });
+        if (uri) {
+          fs.writeFileSync(uri.fsPath, sarif, 'utf-8');
+          vscode.window.showInformationMessage(`Caspian Security: SARIF results exported to ${uri.fsPath}`);
         }
         break;
       }
@@ -470,6 +484,10 @@ export class ResultsPanel implements vscode.Disposable {
     .status-ignored { color: var(--vscode-descriptionForeground); font-size: 11px; }
     .status-failed { color: var(--vscode-errorForeground, #f44336); font-size: 11px; }
     .status-verified { color: #4caf50; font-weight: 600; font-size: 11px; }
+    .confidence-badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; margin-right: 4px; }
+    .confidence-critical { background: #f44336; color: white; }
+    .confidence-safe { background: #4caf50; color: white; }
+    .confidence-verify { background: #ff9800; color: white; }
     .btn-verify {
       background: #4caf50;
       color: white;
@@ -496,6 +514,7 @@ export class ResultsPanel implements vscode.Disposable {
       <button class="btn btn-secondary" id="btn-copy" title="Copy all results to clipboard">Copy All</button>
       <button class="btn btn-secondary" id="btn-csv" title="Export results as CSV">Export CSV</button>
       <button class="btn btn-secondary" id="btn-json" title="Export results as JSON">Export JSON</button>
+      <button class="btn btn-secondary" id="btn-sarif" title="Export SARIF for GitHub Security">Export SARIF</button>
     </div>
   </div>
 
@@ -631,6 +650,9 @@ export class ResultsPanel implements vscode.Disposable {
   document.getElementById('btn-json').addEventListener('click', () => {
     vscode.postMessage({ type: 'exportJSON' });
   });
+  document.getElementById('btn-sarif').addEventListener('click', () => {
+    vscode.postMessage({ type: 'exportSARIF' });
+  });
 
   // Advisories toggle
   let advisoriesExpanded = true;
@@ -729,21 +751,30 @@ export class ResultsPanel implements vscode.Disposable {
     }
   }
 
+  function renderConfidenceBadge(confidenceLevel) {
+    if (!confidenceLevel) return '';
+    if (confidenceLevel === 'critical') return '<span class="confidence-badge confidence-critical">Critical</span>';
+    if (confidenceLevel === 'safe') return '<span class="confidence-badge confidence-safe">Safe</span>';
+    if (confidenceLevel === 'verify-needed') return '<span class="confidence-badge confidence-verify">Verify Needed</span>';
+    return '';
+  }
+
   function renderActionsCell(item) {
+    const badge = renderConfidenceBadge(item.confidenceLevel);
     if (item.fixStatus === 'verified') {
-      return '<span class="status-verified">Verified ✓</span> <button class="btn-reset" data-key="' + escapeAttr(item.issueKey) + '">reset</button>';
+      return badge + '<span class="status-verified">Verified ✓</span> <button class="btn-reset" data-key="' + escapeAttr(item.issueKey) + '">reset</button>';
     }
     if (item.fixStatus === 'fixed') {
-      return '<span class="status-fixed">Fixed</span> <button class="btn-verify" data-key="' + escapeAttr(item.issueKey) + '">Verify</button> <button class="btn-reset" data-key="' + escapeAttr(item.issueKey) + '">reset</button>';
+      return badge + '<span class="status-fixed">Fixed</span> <button class="btn-verify" data-key="' + escapeAttr(item.issueKey) + '">Verify</button> <button class="btn-reset" data-key="' + escapeAttr(item.issueKey) + '">reset</button>';
     }
     if (item.fixStatus === 'ignored') {
-      return '<span class="status-ignored">Ignored</span> <button class="btn-reset" data-key="' + escapeAttr(item.issueKey) + '">reset</button>';
+      return badge + '<span class="status-ignored">Ignored</span> <button class="btn-reset" data-key="' + escapeAttr(item.issueKey) + '">reset</button>';
     }
     if (item.fixStatus === 'fix-failed') {
-      return '<span class="status-failed">Fix Failed</span> <button class="btn-fix" data-key="' + escapeAttr(item.issueKey) + '">Retry</button>';
+      return badge + '<span class="status-failed">Fix Failed</span> <button class="btn-fix" data-key="' + escapeAttr(item.issueKey) + '">Retry</button>';
     }
     // pending
-    return '<button class="btn-fix" data-key="' + escapeAttr(item.issueKey) + '">AI Fix</button>'
+    return badge + '<button class="btn-fix" data-key="' + escapeAttr(item.issueKey) + '">AI Fix</button>'
       + '<button class="btn-verify" data-key="' + escapeAttr(item.issueKey) + '">Verify</button>'
       + '<button class="btn-ignore" data-key="' + escapeAttr(item.issueKey) + '">Ignore</button>';
   }

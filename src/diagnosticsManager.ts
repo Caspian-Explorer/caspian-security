@@ -19,9 +19,12 @@ export class DiagnosticsManager {
     );
 
     const categoryLabel = CATEGORY_LABELS[issue.category] || '';
+    const confidencePrefix = issue.confidenceLevel
+      ? `[${issue.confidenceLevel === 'critical' ? 'Critical' : issue.confidenceLevel === 'safe' ? 'Safe' : 'Verify Needed'}] `
+      : '';
     const diagnostic = new vscode.Diagnostic(
       range,
-      `[${categoryLabel}] ${issue.code}: ${issue.message}`,
+      `${confidencePrefix}[${categoryLabel}] ${issue.code}: ${issue.message}`,
       this.mapSeverity(issue.severity)
     );
 

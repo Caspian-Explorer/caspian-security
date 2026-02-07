@@ -13,6 +13,8 @@ import { checkDependencies, formatResultsAsText, DependencyCheckResult } from '.
 import { AIFixService, AIProviderConfig, AIFixRequest, AIFixError } from './aiFixService';
 import { FixTracker } from './fixTracker';
 import { AISettingsPanel } from './aiSettingsPanel';
+import { extractSmartContext } from './contextExtractor';
+import { loadIgnoreFile, appendIgnoreEntry, isIgnored, IgnoreEntry } from './caspianIgnore';
 
 const BATCH_SIZE = 50;
 
@@ -93,6 +95,7 @@ let aiFixService: AIFixService;
 let fixTracker: FixTracker;
 let aiSettingsPanel: AISettingsPanel;
 let fixPreviewProvider: FixPreviewContentProvider;
+let ignoreEntries: IgnoreEntry[] = [];
 
 export function activate(context: vscode.ExtensionContext) {
   try {
@@ -127,6 +130,19 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Initialize git integration (non-blocking)
     gitIntegration.initialize();
+
+    // Load .caspianignore file and watch for changes
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (workspaceRoot) {
+      ignoreEntries = loadIgnoreFile(workspaceRoot);
+      const ignoreWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(workspaceRoot, '.caspianignore')
+      );
+      ignoreWatcher.onDidChange(() => { ignoreEntries = loadIgnoreFile(workspaceRoot); });
+      ignoreWatcher.onDidCreate(() => { ignoreEntries = loadIgnoreFile(workspaceRoot); });
+      ignoreWatcher.onDidDelete(() => { ignoreEntries = []; });
+      context.subscriptions.push(ignoreWatcher);
+    }
 
     registerCommands(context);
     registerCategoryCommands(context);
@@ -272,11 +288,28 @@ function registerCommands(context: vscode.ExtensionContext) {
 
   // Ignore issue
   context.subscriptions.push(
-    vscode.commands.registerCommand('caspian-security.ignoreIssue', (issueData: {
+    vscode.commands.registerCommand('caspian-security.ignoreIssue', async (issueData: {
       filePath: string; relativePath: string; line: number; code: string; pattern: string;
     }) => {
       const key = FixTracker.makeKey(issueData.relativePath, issueData.code, issueData.line, issueData.pattern);
       fixTracker.markIgnored(key, issueData.filePath, issueData.relativePath, issueData.code, issueData.line, issueData.pattern);
+
+      // Prompt for optional reason and write to .caspianignore
+      const reason = await vscode.window.showInputBox({
+        prompt: `Reason for ignoring ${issueData.code} (optional)`,
+        placeHolder: 'e.g. False positive, sanitized upstream',
+      });
+
+      const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (wsRoot) {
+        appendIgnoreEntry(wsRoot, {
+          ruleCode: issueData.code,
+          filePath: issueData.relativePath,
+          line: issueData.line + 1,
+          reason: reason || undefined,
+        });
+      }
+
       vscode.window.showInformationMessage(`Issue ${issueData.code} marked as ignored.`);
     })
   );
@@ -360,6 +393,21 @@ function registerCommands(context: vscode.ExtensionContext) {
         const fs = await import('fs');
         fs.writeFileSync(uri.fsPath, csv, 'utf-8');
         vscode.window.showInformationMessage(`Caspian Security: Results exported to ${uri.fsPath}`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.exportSARIF', async () => {
+      const sarif = resultsStore.toSARIF();
+      const uri = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.file('caspian-security-results.sarif'),
+        filters: { 'SARIF Files': ['sarif'] },
+      });
+      if (uri) {
+        const fs = await import('fs');
+        fs.writeFileSync(uri.fsPath, sarif, 'utf-8');
+        vscode.window.showInformationMessage(`Caspian Security: SARIF results exported to ${uri.fsPath}`);
       }
     })
   );
@@ -490,7 +538,14 @@ async function checkDocument(document: vscode.TextDocument, categories?: Securit
 
   try {
     const effectiveCategories = categories || configManager.getEnabledCategories();
-    const issues = await analyzer.analyzeDocument(document, effectiveCategories);
+    const allIssues = await analyzer.analyzeDocument(document, effectiveCategories);
+
+    // Filter out issues covered by .caspianignore
+    const relativePath = vscode.workspace.asRelativePath(document.uri);
+    const issues = ignoreEntries.length > 0
+      ? allIssues.filter(issue => !isIgnored(ignoreEntries, issue.code, relativePath, issue.line))
+      : allIssues;
+
     const diagnostics = diagnosticsManager.createDiagnostics(document, issues);
     diagnosticsManager.publishDiagnostics(document.uri, diagnostics);
 
@@ -998,6 +1053,16 @@ async function executeAIFixFromPanel(
   const endLine = Math.min(lines.length, issueData.line + 11);
   const surroundingCode = lines.slice(startLine, endLine).join('\n');
 
+  // Extract smart context: enclosing function scope + variable definitions
+  const smartContext = await extractSmartContext(uri, issueData.line, originalLine);
+
+  const functionScope = smartContext.functionContext?.functionBody;
+  const variableDefinitions = smartContext.variableDefinitions.length > 0
+    ? smartContext.variableDefinitions
+        .map(v => `Line ${v.definitionLine + 1}: ${v.definitionText}`)
+        .join('\n')
+    : undefined;
+
   const request: AIFixRequest = {
     filePath: issueData.relativePath,
     languageId: document.languageId,
@@ -1012,6 +1077,8 @@ async function executeAIFixFromPanel(
     originalLineText: originalLine,
     surroundingCode,
     fullFileContent: fullContent,
+    functionScope,
+    variableDefinitions,
   };
 
   await vscode.window.withProgress(

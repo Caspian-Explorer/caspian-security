@@ -54,6 +54,7 @@ export interface SecurityIssue {
   code: string;
   pattern: string;
   category: SecurityCategory;
+  confidenceLevel?: 'critical' | 'safe' | 'verify-needed';
 }
 
 export interface ProjectAdvisory {
