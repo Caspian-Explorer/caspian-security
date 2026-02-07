@@ -1,13 +1,13 @@
 {
   "name": "caspian-security",
   "displayName": "Caspian Security Extension",
-  "description": "Real-time security analysis for VS Code — 133 rules across 14 categories detecting vulnerabilities, insecure patterns, and security best practice violations",
+  "description": "Context-aware security analysis for VS Code — 133 rules, AI fixes with function-level understanding, confidence scoring, .caspianignore, and SARIF export for GitHub Security",
   "icon": "icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/Caspian-Explorer/caspian-security"
   },
-  "version": "6.1.0",
+  "version": "7.0.0",
   "publisher": "CaspianTools",
   "license": "MIT",
   "engines": {
