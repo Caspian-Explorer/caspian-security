@@ -23,6 +23,8 @@ export interface AIFixRequest {
   originalLineText: string;
   surroundingCode: string;
   fullFileContent: string;
+  functionScope?: string;
+  variableDefinitions?: string;
 }
 
 export interface AIFixResponse {
@@ -67,6 +69,16 @@ Response format (you MUST follow this exactly):
 <high|medium|low>
 ---CONFIDENCE_END---`;
 
+  // Build function scope section if available
+  const functionSection = request.functionScope
+    ? `\nEnclosing function scope:\n\`\`\`${request.languageId}\n${request.functionScope}\n\`\`\`\n`
+    : '';
+
+  // Build variable definitions section if available
+  const variableSection = request.variableDefinitions
+    ? `\nRelevant variable definitions:\n\`\`\`\n${request.variableDefinitions}\n\`\`\`\n`
+    : '';
+
   const user = `File: ${request.filePath}
 Language: ${request.languageId}
 
@@ -84,7 +96,7 @@ The problematic line:
 \`\`\`
 ${request.originalLineText}
 \`\`\`
-
+${functionSection}${variableSection}
 Surrounding context (lines ${Math.max(1, request.issueLine - 9)}-${request.issueLine + 11}):
 \`\`\`${request.languageId}
 ${request.surroundingCode}
@@ -95,7 +107,7 @@ Complete file content to fix:
 ${request.fullFileContent}
 \`\`\`
 
-Apply ONLY the minimum fix needed to resolve the "${request.issueCode}" security issue.`;
+${request.functionScope ? `You are a security expert. Fix the ${request.issueCode} issue on line ${request.issueLine + 1} within the function scope shown above without breaking the surrounding logic.` : `Apply ONLY the minimum fix needed to resolve the "${request.issueCode}" security issue.`}`;
 
   return { system, user };
 }

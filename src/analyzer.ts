@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { SecurityRule, SecurityIssue, SecurityCategory, SecuritySeverity, RuleType, ProjectAdvisory } from './types';
 import { getAllRules, getRulesByCategory, getRuleByCode as registryGetRuleByCode } from './rules';
+import { classifyConfidence } from './confidenceAnalyzer';
 
 export class SecurityAnalyzer {
   private allRules: SecurityRule[];
@@ -129,6 +130,10 @@ export class SecurityAnalyzer {
                 }
               }
 
+              const confidenceLevel = classifyConfidence(
+                lines, lineNum, column, matchText, rule.code
+              );
+
               issues.push({
                 line: lineNum,
                 column,
@@ -138,6 +143,7 @@ export class SecurityAnalyzer {
                 code: rule.code,
                 pattern: matchText,
                 category: rule.category,
+                confidenceLevel,
               });
 
               if (rule.ruleType === RuleType.Informational) {
