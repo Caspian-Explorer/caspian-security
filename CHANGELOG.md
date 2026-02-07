@@ -4,6 +4,30 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [7.0.0] - 2026-02-07
+
+### Added
+
+- **Smart Context AI Fixes** -- AI fix prompts now include the entire enclosing function scope and traced variable definitions, extracted via VS Code's DocumentSymbolProvider. The AI sees the full function body instead of just 20 surrounding lines, producing significantly more accurate fixes for complex code.
+- **Confidence Scoring (Deep Verify)** -- each detected issue now receives a confidence classification based on lightweight variable-source analysis:
+  - **Critical** (red badge) -- hardcoded secret detected as a string literal (e.g., `password = "admin123"`)
+  - **Safe** (green badge) -- static string with no dynamic components (e.g., `query = "SELECT * FROM users"`)
+  - **Verify Needed** (orange badge) -- dynamic value via concatenation or template interpolation (e.g., `query = "SELECT * FROM " + input`)
+  - Confidence badges appear in the results panel next to the Verify button and in VS Code diagnostics
+- **`.caspianignore` File** -- clicking "Ignore" now persists the decision to a `.caspianignore` file in the workspace root. Format: `RULE_CODE file/path.ts:line # optional reason`. The file is loaded on startup and watched for live changes, so teams can commit it to version control and share ignore decisions across machines.
+- **SARIF v2.1.0 Export** -- new "Export SARIF" button in the results panel header. Generates a standards-compliant SARIF file that can be uploaded directly to GitHub Security Alerts (Security tab > Code scanning > Upload SARIF). Includes rule definitions, severity mapping, and physical source locations.
+- New command: "Caspian Security: Export Results to SARIF"
+- New files: `src/contextExtractor.ts`, `src/confidenceAnalyzer.ts`, `src/caspianIgnore.ts`
+
+### Changed
+
+- AI fix prompt now uses a security-expert instruction when function scope is available: "Fix the issue within the function scope shown above without breaking the surrounding logic"
+- Ignore command now shows an optional input box for providing a reason before writing to `.caspianignore`
+- Diagnostics now display confidence prefix when available (e.g., `[Critical] [Secrets] CRED001: ...`)
+- Scanner filters out issues matching `.caspianignore` entries before publishing diagnostics
+
+---
+
 ## [6.1.0] - 2026-02-03
 
 ### Added

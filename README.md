@@ -1,27 +1,31 @@
 # Caspian Security
 
-Real-time static security analysis for Visual Studio Code.
+Context-aware security analysis for Visual Studio Code.
 
 ---
 
 ## Overview
 
-Caspian Security is a VS Code extension that automatically detects vulnerabilities, insecure coding patterns, and security best practice violations as you write code. It provides **133 security rules** organized across **14 categories**, covering everything from SQL injection and XSS to business logic flaws and logging hygiene.
+Caspian Security is a VS Code extension that detects vulnerabilities, insecure coding patterns, and security best practice violations as you write code. It provides **133 security rules** across **14 categories**, covering SQL injection, XSS, hardcoded secrets, business logic flaws, and more.
 
-Designed for development teams that want continuous security feedback without leaving the editor.
+What sets it apart: **context-aware intelligence**. The scanner classifies detected issues with confidence scores (Critical, Safe, or Verify Needed) based on variable-source analysis. AI-powered fixes understand the full function scope and variable definitions -- not just the error line. Teams can share ignore decisions via `.caspianignore`, and scan results export to **SARIF v2.1.0** for direct upload to GitHub Security Alerts.
 
 ---
 
 ## Key Capabilities
 
+- **Context-aware analysis** -- classifies issues by variable source (hardcoded, static, or dynamic) with confidence badges
+- **AI fixes with function-level understanding** -- sends the entire enclosing function and traced variable definitions to the AI, not just 20 lines of context
+- **133 security rules** across 14 categories with actionable fix suggestions
 - **Real-time analysis** -- checks code as you type with a 1-second debounce to avoid lag
 - **Full workspace scanning** -- scans all project files on disk, not just open tabs
-- **133 security rules** across 14 categories with actionable fix suggestions
 - **8 languages supported** -- JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust
+- **Team-shareable `.caspianignore`** -- persist ignore decisions to a version-controlled file with optional reasons
+- **SARIF v2.1.0 export** -- upload scan results directly to GitHub Security Alerts
 - **Per-category toggles** -- enable or disable each security category independently
+- **3 AI providers** -- Anthropic Claude, OpenAI GPT-4, and Google Gemini for fix generation
 - **Cancellable scans** -- workspace scans show progress and can be cancelled mid-run
 - **Configurable severity** -- filter diagnostics by error, warning, or info thresholds
-- **Two rule types** -- code-detectable rules (regex pattern matching) and informational rules (process and policy reminders)
 
 ---
 
@@ -92,7 +96,16 @@ Open the Command Palette (`Ctrl+Shift+P`) and search for any of the following:
 | Caspian Security: Check Current File                 | Scan the active file                          |
 | Caspian Security: Check Entire Workspace             | Scan all supported files in the project       |
 | Caspian Security: Run Full Security Scan             | Scan all categories (file or workspace)       |
-| Caspian Security: Show Fix Suggestion                | Display the fix suggestion for a diagnostic   |
+| Caspian Security: Fix Issue with AI                  | Generate and apply an AI-powered security fix |
+| Caspian Security: Configure AI Fix Provider          | Set up API key for Claude, GPT-4, or Gemini  |
+| Caspian Security: Verify Issue Resolution            | Re-scan a file to confirm an issue is resolved|
+| Caspian Security: Ignore Issue                       | Mark issue as ignored and write to `.caspianignore` |
+| Caspian Security: Show Results Panel                 | Open the interactive results panel            |
+| Caspian Security: Export Results to JSON             | Export scan results as JSON                   |
+| Caspian Security: Export Results to CSV              | Export scan results as CSV                    |
+| Caspian Security: Export Results to SARIF            | Export SARIF v2.1.0 for GitHub Security Alerts|
+| Caspian Security: Check Dependency & Stack Updates   | Check for outdated packages and vulnerabilities|
+| Caspian Security: Scan Uncommitted Files             | Scan only git-modified files                  |
 | Caspian Security: Check Authentication & Access Control | Scan for AUTH rules only                   |
 | Caspian Security: Check Input Validation & XSS       | Scan for XSS rules only                      |
 | Caspian Security: Check CSRF Protection              | Scan for CSRF rules only                     |
@@ -107,7 +120,6 @@ Open the Command Palette (`Ctrl+Shift+P`) and search for any of the following:
 | Caspian Security: Check Logging & Monitoring         | Scan for LOG rules only                      |
 | Caspian Security: Check Dependencies & Supply Chain  | Scan for DEP rules only                      |
 | Caspian Security: Check Infrastructure & Deployment  | Scan for INFRA rules only                    |
-| Caspian Security: Check Dependency & Stack Updates   | Check for outdated packages, vulnerabilities, and stack updates |
 
 ### Scan Modes
 
@@ -128,6 +140,75 @@ Checks for outdated npm packages, known vulnerabilities (`npm audit`), and stack
 
 ---
 
+## AI Fix with Smart Context
+
+When you click **AI Fix** on a detected issue, the extension extracts the full enclosing function using VS Code's built-in symbol provider and traces variable definitions referenced in the vulnerable line. The AI receives:
+
+1. **The complete function body** -- not just 20 lines, but the entire function scope
+2. **Variable definitions** -- where each relevant variable was declared or assigned
+3. **Security-expert instruction** -- "Fix the issue on line N within the function scope without breaking the surrounding logic"
+
+This produces significantly better fixes for issues buried deep inside complex functions. If no symbol provider is available (e.g., plain text files), the extension falls back to the standard 20-line surrounding context.
+
+**Supported AI providers:** Anthropic Claude, OpenAI GPT-4, Google Gemini. Configure via the **AI Settings** button in the results panel.
+
+---
+
+## Confidence Scoring
+
+Each detected issue is analyzed for a **confidence level** based on lightweight variable-source heuristics:
+
+| Level | Badge | Meaning | Example |
+|-------|-------|---------|---------|
+| Critical | Red | Hardcoded secret as a string literal | `const password = "admin123"` |
+| Safe | Green | Static string with no dynamic input | `const query = "SELECT * FROM users"` |
+| Verify Needed | Orange | Dynamic value via concatenation or interpolation | `const query = "SELECT * FROM " + userInput` |
+
+Confidence badges appear:
+- In the **Results Panel** next to the Verify button
+- In **VS Code diagnostics** as a prefix (e.g., `[Critical] [Secrets] CRED001: ...`)
+
+Confidence is only shown when the heuristic is confident in its classification. Issues without a clear signal show no badge.
+
+---
+
+## .caspianignore
+
+When you click **Ignore** on an issue, the decision is written to a `.caspianignore` file in the workspace root. This file can be committed to version control so the entire team shares the same ignore list.
+
+### Format
+
+```
+# Caspian Security Ignore File
+# Format: RULE_CODE file/path.ts:line # optional reason
+
+XSS001 src/app.ts:42 # False positive, sanitized upstream
+CRED001 src/config.ts # Test credentials only
+```
+
+### Behavior
+
+- **On ignore click:** an optional input box prompts for a reason, then the entry is appended
+- **On startup:** the file is loaded and cached
+- **On file change:** a file watcher reloads the ignore list automatically
+- **Matching:** rule code and file path must match. If a line number is specified, it must match too. Omitting the line ignores all instances of that rule in that file.
+
+---
+
+## Export Formats
+
+The results panel header includes buttons to export scan results in three formats:
+
+| Format | Button | Use Case |
+|--------|--------|----------|
+| **JSON** | Export JSON | Custom integrations, dashboards, CI/CD pipelines |
+| **CSV** | Export CSV | Spreadsheets, tabular analysis, reporting |
+| **SARIF v2.1.0** | Export SARIF | GitHub Security Alerts, standard SAST tooling |
+
+The SARIF export follows the [OASIS SARIF v2.1.0 specification](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) and includes rule definitions, severity mapping (Error/Warning/Info to error/warning/note), and physical source locations with 1-based line numbers. Upload it to **GitHub > Security > Code scanning > Upload SARIF** to see results in your repository's security dashboard.
+
+---
+
 ## Configuration
 
 Open VS Code Settings (`Ctrl+,`) and search for **"Caspian Security"** to configure the extension.
@@ -141,6 +222,15 @@ Open VS Code Settings (`Ctrl+,`) and search for **"Caspian Security"** to config
 | `caspianSecurity.severity`          | string   | `warning` | Minimum severity level (`error`, `warning`, `info`) |
 | `caspianSecurity.enabledLanguages`  | array    | All 8     | Languages to include in security checks     |
 | `caspianSecurity.includeDependencyCheck` | boolean | `true` | Include dependency update and vulnerability checks during workspace scans |
+
+### AI Settings
+
+| Setting                             | Type     | Default      | Description                                 |
+|-------------------------------------|----------|--------------|---------------------------------------------|
+| `caspianSecurity.aiProvider`        | string   | `anthropic`  | AI provider for fix generation (`anthropic`, `openai`, `gemini`) |
+| `caspianSecurity.aiModel`           | string   | `""`         | Optional model override (leave empty for provider default) |
+
+API keys are stored securely in the OS keychain via VS Code's SecretStorage API -- they never appear in `settings.json`.
 
 ### Category Toggles
 
@@ -171,6 +261,7 @@ Each security category can be independently enabled or disabled:
   "caspianSecurity.checkOnSave": true,
   "caspianSecurity.severity": "warning",
   "caspianSecurity.enabledLanguages": ["javascript", "typescript", "python"],
+  "caspianSecurity.aiProvider": "anthropic",
   "caspianSecurity.enableCsrfProtection": false,
   "caspianSecurity.enableLoggingMonitoring": false
 }
@@ -411,11 +502,12 @@ Each rule has a **severity** (Error, Warning, or Info) and a **type**: code-dete
 
 ## Complementary Tools
 
-Caspian Security uses pattern-based static analysis and includes built-in dependency checking (`npm outdated`, `npm audit`, stack version checks). While it provides broad coverage of common vulnerabilities and best practices, it is not a replacement for professional security auditing. For comprehensive coverage, use it alongside:
+Caspian Security uses pattern-based static analysis with context-aware intelligence and includes built-in dependency checking. While it provides broad coverage of common vulnerabilities and best practices, it is not a replacement for professional security auditing. For comprehensive coverage, use it alongside:
 
-- **SAST tools** -- SonarQube, Snyk, Semgrep
+- **SAST tools** -- SonarQube, Snyk, Semgrep (Caspian's SARIF export integrates with GitHub Code Scanning alongside these tools)
 - **Dynamic security testing** -- OWASP ZAP, Burp Suite
 - **Dependency scanning** -- Dependabot, Snyk (Caspian's built-in dependency checker covers `npm audit` and `npm outdated`)
+- **GitHub Security Alerts** -- upload Caspian's SARIF export to see results in your repository's security dashboard
 - **Regular code reviews and security audits**
 
 ---

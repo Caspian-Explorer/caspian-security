@@ -250,7 +250,7 @@ export class ResultsStore implements vscode.Disposable {
           tool: {
             driver: {
               name: 'Caspian Security',
-              version: '6.1.0',
+              version: '7.0.0',
               informationUri: 'https://marketplace.visualstudio.com/items?itemName=CaspianTools.caspian-security',
               rules: sarifRules,
             },
