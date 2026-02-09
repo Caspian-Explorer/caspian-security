@@ -43,6 +43,18 @@ export const inputValidationRules: SecurityRule[] = [
     patterns: [
       /dangerouslySetInnerHTML/,
     ],
+    negativePatterns: [
+      /JSON\.stringify/i,
+      /DOMPurify/i,
+      /sanitize\w*\s*\(/i,
+      /purify/i,
+    ],
+    suppressIfNearby: [
+      /JSON\.stringify/i,
+      /DOMPurify\.sanitize/i,
+      /sanitizeHtml/i,
+      /application\/ld\+json/i,
+    ],
     suggestion: 'Sanitize content with DOMPurify before using dangerouslySetInnerHTML',
     category: SecurityCategory.InputValidationXSS,
     ruleType: RuleType.CodeDetectable,

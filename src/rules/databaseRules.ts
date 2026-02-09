@@ -145,7 +145,15 @@ export const databaseRules: SecurityRule[] = [
     severity: SecuritySeverity.Error,
     patterns: [
       /(?:user|username)\s*[:=]\s*['"](?:root|admin|sa|postgres|mysql)['"]/i,
-      /(?:password|passwd|pwd)\s*[:=]\s*['"](?:root|admin|password|123456|)['"]/i,
+      /(?:password|passwd|pwd)\s*[:=]\s*['"](?:root|admin|password|123456)['"]/i,
+    ],
+    negativePatterns: [
+      /crypto\.randomBytes/i,
+      /randomBytes/i,
+      /generatePassword/i,
+      /generateTempPassword/i,
+      /randomPassword/i,
+      /uuid/i,
     ],
     suggestion: 'Change default database credentials immediately; use strong, unique passwords managed via secrets manager',
     category: SecurityCategory.DatabaseSecurity,

@@ -542,9 +542,36 @@ async function checkDocument(document: vscode.TextDocument, categories?: Securit
 
     // Filter out issues covered by .caspianignore
     const relativePath = vscode.workspace.asRelativePath(document.uri);
-    const issues = ignoreEntries.length > 0
+    let issues = ignoreEntries.length > 0
       ? allIssues.filter(issue => !isIgnored(ignoreEntries, issue.code, relativePath, issue.line))
       : allIssues;
+
+    // Filter out informational findings if the user has disabled them
+    if (!configManager.getShowInformational()) {
+      issues = issues.filter(issue => issue.severity !== SecuritySeverity.Info);
+    }
+
+    // Reduce severity for files in admin/scripts/internal paths
+    if (configManager.getReduceInternalPathSeverity()) {
+      const INTERNAL_PATH_PATTERNS = [
+        /[\/\\]scripts?[\/\\]/i,
+        /[\/\\]admin[\/\\]/i,
+        /[\/\\]internal[\/\\]/i,
+        /[\/\\]tools?[\/\\]/i,
+        /[\/\\]seed[\/\\]/i,
+        /[\/\\]migrations?[\/\\]/i,
+        /[\/\\]fixtures?[\/\\]/i,
+      ];
+      const filePath = document.uri.fsPath;
+      if (INTERNAL_PATH_PATTERNS.some(p => p.test(filePath))) {
+        issues = issues
+          .filter(issue => issue.severity !== SecuritySeverity.Info)
+          .map(issue => issue.severity === SecuritySeverity.Warning
+            ? { ...issue, severity: SecuritySeverity.Info }
+            : issue
+          );
+      }
+    }
 
     const diagnostics = diagnosticsManager.createDiagnostics(document, issues);
     diagnosticsManager.publishDiagnostics(document.uri, diagnostics);

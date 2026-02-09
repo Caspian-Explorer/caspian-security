@@ -20,6 +20,7 @@ export class SecurityAnalyzer {
       const text = document.getText();
       const lines = text.split('\n');
       const informationalFired = new Set<string>();
+      const informationalCandidates = new Map<string, SecurityIssue[]>();
       const filePath = document.uri.fsPath;
 
       for (let lineNum = 0; lineNum < lines.length; lineNum++) {
@@ -33,7 +34,11 @@ export class SecurityAnalyzer {
           }
 
           if (rule.ruleType === RuleType.Informational && informationalFired.has(rule.code)) {
-            continue;
+            // Allow collecting up to 10 candidates for better line targeting
+            const existing = informationalCandidates.get(rule.code);
+            if (existing && existing.length >= 10) {
+              continue;
+            }
           }
 
           // File-pattern exclusion: skip if file doesn't match include or matches exclude
@@ -134,7 +139,7 @@ export class SecurityAnalyzer {
                 lines, lineNum, column, matchText, rule.code
               );
 
-              issues.push({
+              const issue: SecurityIssue = {
                 line: lineNum,
                 column,
                 message: rule.message,
@@ -144,10 +149,17 @@ export class SecurityAnalyzer {
                 pattern: matchText,
                 category: rule.category,
                 confidenceLevel,
-              });
+              };
 
               if (rule.ruleType === RuleType.Informational) {
+                // Defer informational issues: collect candidates and pick the best line later
+                if (!informationalCandidates.has(rule.code)) {
+                  informationalCandidates.set(rule.code, []);
+                }
+                informationalCandidates.get(rule.code)!.push(issue);
                 informationalFired.add(rule.code);
+              } else {
+                issues.push(issue);
               }
 
               break;
@@ -156,6 +168,13 @@ export class SecurityAnalyzer {
             }
           }
         }
+      }
+
+      // For informational rules, pick the most relevant line (prefer function bodies over imports/declarations)
+      for (const [, candidates] of informationalCandidates) {
+        if (candidates.length === 0) { continue; }
+        const best = pickBestInformationalCandidate(candidates, lines);
+        issues.push(best);
       }
 
       return issues;
@@ -311,4 +330,47 @@ function isInsideJSXText(line: string, column: number): boolean {
   if (after.includes('<')) { return true; }
 
   return false;
+}
+
+/**
+ * For informational rules that fire once per file, pick the most relevant line
+ * from collected candidates. Prefers lines inside function bodies over
+ * imports, declarations, and type annotations.
+ */
+function pickBestInformationalCandidate(candidates: SecurityIssue[], lines: string[]): SecurityIssue {
+  if (candidates.length === 1) { return candidates[0]; }
+
+  const DECLARATION_PATTERN = /^\s*(?:import\s|export\s(?:type|interface|default)|const\s|let\s|var\s|type\s|interface\s|class\s)/;
+  const FUNCTION_BODY_PATTERN = /(?:function\s|=>\s*\{|\.(?:then|catch|map|forEach|filter|reduce)\s*\()/;
+
+  // Score each candidate: higher is better
+  let bestScore = -1;
+  let bestCandidate = candidates[0];
+
+  for (const candidate of candidates) {
+    const line = lines[candidate.line] || '';
+    let score = 1; // base score
+
+    // Penalize imports and declarations
+    if (DECLARATION_PATTERN.test(line)) {
+      score = 0;
+    }
+
+    // Boost lines that look like they're inside function bodies
+    if (FUNCTION_BODY_PATTERN.test(line)) {
+      score += 2;
+    }
+
+    // Boost lines with function calls (more likely to be executable code)
+    if (/\w+\s*\(/.test(line) && !DECLARATION_PATTERN.test(line)) {
+      score += 1;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestCandidate = candidate;
+    }
+  }
+
+  return bestCandidate;
 }

@@ -124,6 +124,14 @@ export class ConfigManager {
     return this.config.get('includeDependencyCheck', true);
   }
 
+  getShowInformational(): boolean {
+    return this.config.get('showInformational', true);
+  }
+
+  getReduceInternalPathSeverity(): boolean {
+    return this.config.get('reduceInternalPathSeverity', true);
+  }
+
   getAIProvider(): string {
     return this.config.get('aiProvider', 'anthropic');
   }

@@ -106,8 +106,17 @@ export const fileHandlingRules: SecurityRule[] = [
     patterns: [
       /(?:acl|ACL)\s*[:=]\s*['"]public-read['"]/i,
       /PublicRead/,
-      /allUsers/i,
+      /allUsers.*(?:storage|bucket|iam|role|binding|permission|acl)/i,
+      /(?:storage|bucket|iam|role|binding|permission|acl).*allUsers/i,
       /public\s*:\s*true.*(?:bucket|storage|blob)/i,
+    ],
+    negativePatterns: [
+      /<Select/i,
+      /<Option/i,
+      /SelectItem/i,
+      /MenuItem/i,
+      /value\s*=\s*["']/i,
+      /label\s*=\s*["']/i,
     ],
     suggestion: 'Set storage buckets to private by default; use signed URLs or IAM policies for controlled access',
     category: SecurityCategory.FileHandling,

@@ -51,8 +51,21 @@ export const loggingRules: SecurityRule[] = [
     message: 'Password may be present in log output',
     severity: SecuritySeverity.Error,
     patterns: [
-      /(?:console\.log|logger\.\w+|log\.\w+|print)\s*\(.*password/i,
-      /(?:console\.log|logger\.\w+|log\.\w+|print)\s*\(.*passwd/i,
+      // password as a variable/property: log(password), log(user.password), log({password})
+      /(?:console\.log|logger\.\w+|log\.\w+|print)\s*\(.*[\s,{(+]password\s*[,}):\]]/i,
+      /(?:console\.log|logger\.\w+|log\.\w+|print)\s*\(.*[\s,{(+]passwd\s*[,}):\]]/i,
+      // string concatenation with password variable: "text" + password
+      /(?:console\.log|logger\.\w+|log\.\w+|print)\s*\(.*\+\s*password/i,
+      // template literal interpolation: `${password}` or `${user.password}`
+      /(?:console\.log|logger\.\w+|log\.\w+|print)\s*\(.*\$\{.*password/i,
+    ],
+    negativePatterns: [
+      /temporary passwords/i,
+      /password requirements/i,
+      /password policy/i,
+      /password must/i,
+      /password has been/i,
+      /reset password/i,
     ],
     suggestion: 'NEVER log passwords in any form; strip password fields before logging request bodies',
     category: SecurityCategory.LoggingMonitoring,

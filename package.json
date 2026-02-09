@@ -329,6 +329,16 @@
             "Google Gemini"
           ]
         },
+        "caspianSecurity.showInformational": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show informational reminders alongside security findings. Disable to see only actionable security issues."
+        },
+        "caspianSecurity.reduceInternalPathSeverity": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reduce severity for files in admin, scripts, internal, and seed directories"
+        },
         "caspianSecurity.aiModel": {
           "type": "string",
           "default": "",
