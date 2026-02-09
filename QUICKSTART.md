@@ -22,47 +22,47 @@ code .
 
 1. **Create a test file** (`test.js`):
 ```javascript
-// This will trigger security warnings
-const password = "admin123";
-const apiKey = "sk_live_secret";
+// These will trigger security warnings
+const password = "admin123";         // CRED001: Hardcoded credential
+const apiKey = "sk_live_secret";     // CRED001: Hardcoded secret
 
 function getUser(id) {
-  return query("SELECT * FROM users WHERE id = " + id);
+  return query("SELECT * FROM users WHERE id = " + id);  // DB001: SQL injection
 }
 ```
 
-2. **Watch the magic happen** - Security issues will appear as red/yellow squiggles
+2. **Watch the magic happen** -- Security issues appear as red/yellow squiggles with confidence badges
 
-3. **Check the Problems panel** - View all detected issues with suggestions
+3. **Check the Problems panel** (`Ctrl+Shift+M`) -- View all detected issues with fix suggestions
+
+4. **Try AI Fix** -- Click "AI Fix" on any issue to generate and apply an AI-powered fix (requires API key)
 
 ## Key Shortcuts
 
 | Action | Shortcut |
 |--------|----------|
-| Check current file | `Ctrl+Shift+P` → "Check Current File" |
-| Check workspace | `Ctrl+Shift+P` → "Check Entire Workspace" |
+| Check current file | `Ctrl+Shift+P` then "Check Current File" |
+| Check workspace | `Ctrl+Shift+P` then "Check Entire Workspace" |
 | View problems | `Ctrl+Shift+M` |
+| Open results panel | `Ctrl+Shift+P` then "Show Results Panel" |
 | Open settings | `Ctrl+,` then search "Caspian Security" |
 
-## Built-in Security Rules
+## What It Detects
 
-The extension detects 16 security patterns including:
-- SQL Injection (SEC001)
-- Hardcoded Credentials (SEC002)
-- Weak Cryptography (SEC003)
-- Unsafe eval() (SEC004)
-- Path Traversal (SEC005)
-- Missing CSRF Protection (SEC006)
-- Unsafe Deserialization (SEC007)
-- Missing Input Validation (SEC008)
-- Missing Authentication (SEC009)
-- XXE Vulnerabilities (SEC010)
-- Insecure HTTP (SEC011)
-- Missing Security Headers (SEC012)
-- Logging Sensitive Data (SEC013)
-- Missing Rate Limiting (SEC014)
-- Command Injection (SEC015)
-- Weak Random Numbers (SEC016)
+133+ security rules across 14 categories:
+
+| Category | Examples |
+|----------|----------|
+| **Secrets & Credentials** | Hardcoded passwords, AWS keys, API tokens |
+| **Database Security** | SQL injection, NoSQL injection, default credentials |
+| **Input Validation & XSS** | innerHTML, dangerouslySetInnerHTML, template injection |
+| **Authentication** | JWT secrets, session flags, weak passwords |
+| **API Security** | Missing auth middleware, IDOR, error exposure |
+| **File Handling** | Path traversal, public storage buckets |
+| **Business Logic** | Client-side premium checks, payment verification |
+| **And more...** | CSRF, CORS, encryption, frontend, infrastructure |
+
+See [README.md](README.md) for the full rule reference.
 
 ## Configuration
 
@@ -70,28 +70,18 @@ Open Settings (`Ctrl+,`) and search "caspianSecurity":
 
 ```json
 {
-  "caspianSecurity.autoCheck": true,           // Auto-check as you type
-  "caspianSecurity.checkOnSave": true,         // Check on save
-  "caspianSecurity.severity": "warning",       // Min level: error|warning|info
-  "caspianSecurity.enabledLanguages": [
-    "javascript",
-    "typescript",
-    "python",
-    "java",
-    "csharp",
-    "php",
-    "go",
-    "rust"
-  ]
+  "caspianSecurity.autoCheck": true,
+  "caspianSecurity.checkOnSave": true,
+  "caspianSecurity.severity": "warning",
+  "caspianSecurity.showInformational": true,
+  "caspianSecurity.reduceInternalPathSeverity": true,
+  "caspianSecurity.aiProvider": "anthropic"
 }
 ```
 
 ## Next Steps
 
-📚 **Read Full Documentation**: See `README.md` for comprehensive guide
-🔧 **Development Guide**: See `BUILD.md` for building and extending
-🚀 **Create Rules**: Add custom security rules in `src/analyzer.ts`
-
----
-
-**Questions?** Check the troubleshooting section in README.md
+- **Full documentation**: [README.md](README.md)
+- **Development guide**: [BUILD.md](BUILD.md)
+- **Architecture**: [ARCHITECTURE.md](ARCHITECTURE.md)
+- **Troubleshooting**: See the troubleshooting section in [README.md](README.md)

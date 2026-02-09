@@ -1,4 +1,4 @@
-# Security Checker - Architecture & Design
+# Caspian Security - Architecture & Design
 
 ## System Architecture
 
@@ -12,385 +12,244 @@
                     │                    │
             ┌───────▼────────┐   ┌──────▼──────────┐
             │  Document      │   │   Commands      │
-            │  Events        │   │   (Commands)    │
+            │  Events        │   │   (Palette)     │
             └────────┬───────┘   └──────┬──────────┘
                      │                  │
                      └──────────┬───────┘
                                 │
                     ┌───────────▼────────────┐
-                    │   Extension Main      │
-                    │   (extension.ts)      │
+                    │   Extension Main       │
+                    │   (extension.ts)       │
                     └───────────┬────────────┘
                                 │
-    ┌───────────┬───────────────┼──────────────────┬────────────┐
-    │           │               │                  │            │
-┌───▼────┐ ┌───▼────────┐  ┌───▼────────┐  ┌────▼──────┐ ┌───▼────────┐
-│AI Fix  │ │  Analyzer  │  │Diagnostics │  │  Config   │ │ Fix        │
-│Service │ │(analyzer.ts│  │  Manager   │  │  Manager  │ │ Tracker    │
-│(aiFix  │ │)           │  │(diagnostic │  │(config    │ │(fixTracker │
-│Service │ │- Rules     │  │ Manager.ts)│  │Manager.ts)│ │.ts)        │
-│.ts)    │ │- Patterns  │  │            │  │           │ │            │
-│        │ │- Matching  │  │- Create    │  │- Load     │ │- Track     │
-│- Claude│ │- Detection │  │- Publish   │  │- Save     │ │- Persist   │
-│- OpenAI│ └────────────┘  │- Display   │  │- Listen   │ │- Events    │
-│- Gemini│                 └────────────┘  └───────────┘ └────────────┘
-└────────┘
+    ┌──────────┬────────────────┼──────────────────┬──────────────┐
+    │          │                │                  │              │
+┌───▼────┐ ┌──▼───────────┐ ┌──▼──────────┐ ┌───▼────────┐ ┌───▼──────────┐
+│AI Fix  │ │  Analyzer    │ │Diagnostics  │ │  Config    │ │ Results      │
+│Service │ │(analyzer.ts) │ │  Manager    │ │  Manager   │ │ Store        │
+│        │ │              │ │             │ │            │ │              │
+│- Claude│ │- Rule engine │ │- Create     │ │- Settings  │ │- File results│
+│- OpenAI│ │- Pattern     │ │- Publish    │ │- Categories│ │- JSON/CSV    │
+│- Gemini│ │  matching    │ │- Severity   │ │- Languages │ │- SARIF export│
+└────────┘ │- Context     │ └─────────────┘ └────────────┘ └──────────────┘
+           │  awareness   │
+           └──────┬───────┘
+                  │
+    ┌─────────────┼─────────────────┬──────────────────┐
+    │             │                 │                  │
+┌───▼──────┐ ┌───▼──────────┐ ┌───▼──────────┐ ┌────▼─────────┐
+│ Rules    │ │ Confidence   │ │ Context      │ │ .caspian     │
+│ (14 cat  │ │ Analyzer     │ │ Extractor    │ │ ignore       │
+│ files)   │ │              │ │              │ │              │
+│          │ │- Critical    │ │- Function    │ │- Parse file  │
+│- 133+    │ │- Safe        │ │  scope       │ │- Watch       │
+│  rules   │ │- Verify      │ │- Variable    │ │- Match rules │
+│- Patterns│ │  needed      │ │  definitions │ │- Persist     │
+└──────────┘ └──────────────┘ └──────────────┘ └──────────────┘
 ```
 
-## Data Flow
+## Analysis Pipeline
 
-### 1. Document Change Detection
 ```
-User types code
-         │
-         ▼
-onDidChangeTextDocument event fires
-         │
-         ▼
-Check if document should be analyzed (language, scheme)
-         │
-         ▼
-Debounce timer starts (1 second)
-         │
-         ▼
-After timeout: checkDocument() called
-```
-
-### 2. Security Analysis
-```
-Document text → Analyzer
-         │
-         ▼
+Document text
+       │
+       ▼
 Split into lines
-         │
-         ▼
-For each line:
-  For each rule:
-    For each pattern:
-      Match against line
-         │
-         ▼
-Collect all matches → SecurityIssue[]
-```
-
-### 3. Diagnostic Display
-```
-SecurityIssue[]
-         │
-         ▼
-DiagnosticsManager.createDiagnostics()
-         │
-         ▼
-Convert to VS Code Diagnostic objects
-         │
-         ▼
-Map severity levels
-         │
-         ▼
-Attach suggestions
-         │
-         ▼
-publishDiagnostics() to VS Code
-         │
-         ▼
-Display as red/yellow squiggles
+       │
+       ▼
+For each line × each rule:
+  1. File pattern filtering (include/exclude/reduceSeverityIn)
+  2. Pattern matching (regex or string)
+  3. Context-aware filtering (skip comments, strings, JSX text)
+  4. Negative pattern check (skip if safe pattern on same line)
+  5. Suppress-if-nearby check (skip if safe pattern within ±3 lines)
+  6. Effective severity calculation (file-path reduction)
+  7. Internal-path severity reduction (admin/scripts/seed paths)
+  8. Confidence classification (critical/safe/verify-needed)
+  9. Informational candidate collection (deferred, best-line scoring)
+       │
+       ▼
+Filter: .caspianignore entries
+Filter: showInformational setting
+Filter: reduceInternalPathSeverity setting
+       │
+       ▼
+DiagnosticsManager → VS Code squiggles
+ResultsStore → Results panel + SARIF/JSON/CSV export
 ```
 
 ## Component Details
 
 ### extension.ts (Main Controller)
-**Responsibilities:**
 - Extension lifecycle (activate/deactivate)
-- Event registration and handling
-- Command registration
-- Orchestrating components
+- Event registration with 1-second debounce
+- Command registration (24 commands)
 - AI fix workflow (generate, diff preview, apply, verify)
+- `.caspianignore` loading and file watching
+- Informational filtering and internal-path severity reduction
+- Workspace scanning with batched progress
+- Git uncommitted file scanning
+- Dependency checking integration
 
-**Key Functions:**
-- `activate()` - Extension entry point
-- `registerCommands()` - Register VS Code commands
-- `registerDocumentListeners()` - Set up event handlers
-- `checkDocument()` - Trigger analysis on a document
-- `runWorkspaceCheck()` - Batch analyze all files
-- `executeAIFixFromPanel()` - AI fix workflow: generate fix, show diff, apply, re-scan
-- `showDiffAndApply()` - Show side-by-side diff preview and apply on confirmation
-- `handleAIError()` - Typed error handling for AI provider errors
+### analyzer.ts (Security Engine)
+- Line-by-line pattern matching against 133+ rules
+- Context-aware filtering (comments, strings, JSX text)
+- Negative pattern and suppress-if-nearby logic
+- File pattern include/exclude/reduceSeverityIn
+- Informational rule candidate scoring (picks best line)
+- Confidence classification delegation
+- Project advisory collection
 
-### analyzer.ts (Security Logic)
-**Responsibilities:**
-- Define security rules
-- Pattern matching
-- Issue detection
-- Rule management
+### rules/ (14 Category Files)
+Each file exports an array of `SecurityRule` objects:
 
-**Key Functions:**
-- `analyzeDocument()` - Main analysis function
-- `findMatches()` - Find pattern matches in text
-- `initializeRules()` - Initialize all 16 security rules
+| File | Category | Rules |
+|------|----------|-------|
+| `authRules.ts` | Authentication & Access Control | AUTH001--AUTH007 |
+| `inputValidationRules.ts` | Input Validation & XSS | XSS001--XSS011 |
+| `csrfRules.ts` | CSRF Protection | CSRF001--CSRF007 |
+| `corsRules.ts` | CORS Configuration | CORS001--CORS006 |
+| `encryptionRules.ts` | Encryption & Data Protection | ENC001--ENC012 |
+| `apiSecurityRules.ts` | API Security | API001--API014 |
+| `databaseRules.ts` | Database Security | DB001--DB012 |
+| `fileHandlingRules.ts` | File Handling | FILE001--FILE014 |
+| `secretsRules.ts` | Secrets & Credentials | CRED001--CRED009 |
+| `frontendRules.ts` | Frontend Security | FE001--FE009 |
+| `businessLogicRules.ts` | Business Logic & Payment | BIZ001--BIZ009 |
+| `loggingRules.ts` | Logging & Monitoring | LOG001--LOG009 |
+| `dependenciesRules.ts` | Dependencies & Supply Chain | DEP001--DEP006 |
+| `infrastructureRules.ts` | Infrastructure & Deployment | INFRA001--INFRA008 |
 
-**Security Rules:**
-16 built-in rules covering:
-- Injection attacks (SQL, Command)
-- Cryptography weaknesses
-- Authentication/Authorization
-- Sensitive data exposure
-- Dangerous functions
-- Configuration issues
+**Total: 133+ rules** (74 code-detectable + 59 informational/advisory)
 
-### diagnosticsManager.ts (VS Code Integration)
-**Responsibilities:**
-- Create VS Code Diagnostic objects
-- Manage diagnostic collection
-- Handle severity mapping
-- Attach suggestions to issues
-
-**Key Functions:**
-- `createDiagnostic()` - Convert issue to Diagnostic
-- `publishDiagnostics()` - Send to VS Code
-- `clearDiagnostics()` - Remove diagnostics
-- `getSummary()` - Get issue statistics
-
-### configManager.ts (Configuration)
-**Responsibilities:**
-- Read user settings
-- Manage configuration changes
-- Provide defaults
-- Handle language preferences
-
-**Key Functions:**
-- `getAutoCheck()` - Check if auto-check enabled
-- `getCheckOnSave()` - Check if check-on-save enabled
-- `getEnabledLanguages()` - Get supported languages list
-- `getAIProvider()` / `setAIProvider()` - AI provider selection
-- `getAIModel()` / `setAIModel()` - Optional model override
-- `resetToDefaults()` - Reset all settings
-
-### types.ts (Type Definitions)
-**Provides:**
-- `SecuritySeverity` enum
-- `SecurityRule` interface
-- `SecurityIssue` interface
-- Type safety throughout codebase
-
-### aiFixService.ts (AI Fix Generation)
-**Responsibilities:**
-- AI provider abstraction (Anthropic, OpenAI, Gemini)
-- Secure API key storage via VS Code SecretStorage
-- Prompt engineering for security-focused code repair
-- HTTP communication with AI APIs
-- Response parsing with structured delimiters
-
-**Key Functions:**
-- `getProviderConfig()` - Read provider config + API key from SecretStorage
-- `generateFix()` - Send code + issue context to AI, return fixed content
-- `testConnection()` - Verify API key with a lightweight request
-- `buildFixPrompt()` - Construct system + user prompts for the AI
-
-### fixTracker.ts (Issue Status Persistence)
-**Responsibilities:**
-- Track fix status per issue (pending, fixed, ignored, fix-failed)
-- Persist status across VS Code restarts via workspaceState
-- Provide summary statistics for UI progress display
-
-**Key Functions:**
-- `makeKey()` - Generate deterministic issue identity from file:code:line:pattern
-- `markFixed()` / `markIgnored()` / `markFixFailed()` - Status transitions
-- `getSummary()` - Aggregate counts for progress bar
-- `onDidChange` - Event emitter for reactive UI updates
-
-### aiSettingsPanel.ts (AI Configuration UI)
-**Responsibilities:**
-- Webview panel for configuring AI provider and API key
-- Connection testing
-- Secure key management (save/clear via SecretStorage)
-
-**Key Functions:**
-- `show()` - Open or reveal the settings panel
-- Message handlers: saveKey, clearKey, setProvider, setModel, testConnection
-
-## Security Rule Structure
+### Security Rule Structure
 
 ```typescript
-{
-  code: 'SEC001',                              // Unique identifier
-  message: 'Potential SQL Injection...',       // User-facing message
-  severity: SecuritySeverity.Error,            // Error/Warning/Info
-  patterns: [                                  // Detection patterns
-    /query\s*\(\s*["'`].*\$\{.*\}.*["'`]/i,
-    /SELECT.*FROM.*WHERE.*\+/i,
-  ],
-  suggestion: 'Use parameterized queries...'   // Fix suggestion
+interface SecurityRule {
+  code: string;                           // e.g., 'DB011'
+  message: string;                        // User-facing message
+  severity: SecuritySeverity;             // Error (2), Warning (1), Info (0)
+  patterns: (RegExp | string)[];          // Detection patterns
+  suggestion: string;                     // Fix recommendation
+  category: SecurityCategory;             // 1 of 14 categories
+  ruleType: RuleType;                     // CodeDetectable, Informational, ProjectAdvisory
+  contextAware?: boolean;                 // Skip matches in comments/strings/JSX
+  negativePatterns?: (RegExp | string)[]; // Suppress if safe pattern on same line
+  suppressIfNearby?: RegExp[];            // Suppress if safe pattern within ±3 lines
+  filePatterns?: {
+    include?: RegExp[];                   // Only match files matching these
+    exclude?: RegExp[];                   // Skip files matching these
+    reduceSeverityIn?: RegExp[];          // Downgrade to Info in these files
+  };
 }
 ```
+
+### confidenceAnalyzer.ts
+- Classifies issues as `critical`, `safe`, or `verify-needed`
+- Analyzes whether matched values are hardcoded literals vs. env references
+- Applied to secret rules (CRED, AUTH001) and query rules (DB001, DB002)
+
+### contextExtractor.ts
+- Extracts enclosing function scope via VS Code DocumentSymbolProvider
+- Traces variable definitions referenced in the vulnerable line
+- Provides rich context for AI fix generation
+
+### caspianIgnore.ts
+- Parses `.caspianignore` files (format: `RULE_CODE filepath:line # reason`)
+- Rule-specific, line-specific, and file-wide ignores
+- File watcher for live reloading
+
+### aiFixService.ts
+- Provider abstraction for Anthropic Claude, OpenAI GPT-4, Google Gemini
+- Secure API key storage via VS Code SecretStorage (OS keychain)
+- Prompt engineering with function-scope context
+- Response parsing with structured delimiters
+
+### fixTracker.ts
+- Tracks per-issue status: pending, fixed, ignored, verified, fix-failed
+- Persists across VS Code restarts via workspaceState
+- Summary statistics for progress bar display
+
+### resultsStore.ts
+- Stores scan results per file with issues, language, and timestamps
+- JSON, CSV, and SARIF v2.1.0 export
+- Project advisory storage
+- Scan metadata (duration, scan type)
+
+### diagnosticsManager.ts
+- Converts SecurityIssues to VS Code Diagnostic objects
+- Maps severity levels (Error/Warning/Info)
+- Attaches confidence prefixes and category labels
+
+### configManager.ts
+- Reads all `caspianSecurity.*` settings
+- Category enable/disable toggles
+- Language filtering
+- AI provider and model configuration
+- Informational toggle and internal-path severity settings
+
+### statusBarManager.ts
+- Scanning progress display
+- Issue count summary with fix/ignore counts
+
+### gitIntegration.ts
+- Detects git repository
+- Lists uncommitted files for targeted scanning
+
+### dependencyChecker.ts
+- Runs `npm outdated` and `npm audit`
+- Checks Node.js, TypeScript, and VS Code engine versions
+- Standalone CLI mode via `src/cli/checkUpdates.ts`
 
 ## Configuration Schema
 
 ```json
 {
-  "securityChecker.autoCheck": boolean,
-  "securityChecker.checkOnSave": boolean,
-  "securityChecker.severity": "error" | "warning" | "info",
-  "securityChecker.enabledLanguages": string[]
+  "caspianSecurity.autoCheck": true,
+  "caspianSecurity.checkOnSave": true,
+  "caspianSecurity.severity": "warning",
+  "caspianSecurity.enabledLanguages": ["javascript", "typescript", "python", "java", "csharp", "php", "go", "rust"],
+  "caspianSecurity.includeDependencyCheck": true,
+  "caspianSecurity.showInformational": true,
+  "caspianSecurity.reduceInternalPathSeverity": true,
+  "caspianSecurity.aiProvider": "anthropic",
+  "caspianSecurity.aiModel": "",
+  "caspianSecurity.enable<Category>": true
 }
 ```
 
-## Event Flow Diagram
+## Performance
 
-```
-┌─────────────────────────┐
-│  User Opens File        │
-└────────────┬────────────┘
-             │
-             ▼
-┌──────────────────────────┐
-│ onDidOpenTextDocument    │
-│ Event Fired              │
-└────────────┬─────────────┘
-             │
-             ▼
-┌──────────────────────────┐
-│ shouldCheckDocument()?   │
-│ - Check language         │
-│ - Check scheme           │
-└────────────┬─────────────┘
-             │
-      ┌──────┴──────┐
-      │             │
-   YES│             │NO
-      │             └──→ Skip
-      ▼
-┌──────────────────────────┐
-│ checkDocument()          │
-└────────────┬─────────────┘
-             │
-             ▼
-┌──────────────────────────┐
-│ analyzer.analyze()       │
-│ Returns SecurityIssue[]  │
-└────────────┬─────────────┘
-             │
-             ▼
-┌──────────────────────────┐
-│ diagnosticsManager       │
-│ .publishDiagnostics()    │
-└────────────┬─────────────┘
-             │
-             ▼
-┌──────────────────────────┐
-│ Red/Yellow Squiggles     │
-│ in VS Code Editor        │
-└──────────────────────────┘
-```
+- **Debouncing**: 1-second delay prevents lag during typing
+- **Language filtering**: Only analyzes supported languages
+- **Lazy initialization**: Rules created once at startup
+- **Regex compilation**: Patterns compiled once
+- **Early exit**: Skips untitled and non-file documents
+- **Batch scanning**: Workspace scans grouped by language in batches of 50
+- **Event loop yielding**: Every 10 files during workspace scan to keep UI responsive
+- **Informational dedup**: Informational rules collect up to 10 candidates, fire once per file
 
-## Document Change Debouncing
+## File Sizes
 
-```
-User typing... typing... typing...
-     │         │         │
-     ▼         ▼         ▼
-  Timer      Timer      Timer
-  Reset      Reset      Reset
-     │         │         │
-     └─────────┴─────────┘
-                │
-         (1 second passes,
-          no more changes)
-                │
-                ▼
-         Analysis runs
-```
-
-Prevents excessive analysis during active typing, improving performance.
-
-## Error Handling
-
-### In analyzer.ts
-```typescript
-try {
-  const issues = await analyzer.analyzeDocument(document);
-  // Process issues
-} catch (error) {
-  console.error('Error during security check:', error);
-  // Gracefully handle errors
-}
-```
-
-### In extension.ts
-```typescript
-if (!editor) {
-  vscode.window.showWarningMessage('No active editor found');
-  return;
-}
-```
-
-## Performance Considerations
-
-1. **Debouncing**: 1-second delay prevents lag during typing
-2. **Language Filtering**: Only analyze supported languages
-3. **Lazy Initialization**: Rules created once at startup
-4. **Regex Compilation**: Patterns compiled once
-5. **Early Exit**: Skip untitled and non-file documents
-
-## Extensibility Points
-
-### Add New Rules
-Edit `src/analyzer.ts` initializeRules():
-```typescript
-{
-  code: 'SEC017',
-  message: 'New security issue',
-  severity: SecuritySeverity.Warning,
-  patterns: [/pattern/i],
-  suggestion: 'How to fix',
-}
-```
-
-### Add Code Actions
-Create `src/codeActions.ts` implementing CodeActionProvider
-
-### Add Custom Rules
-Create `src/customRules.ts` to load external rule definitions
-
-### Integrate External Tools
-- Call eslint-plugin-security
-- Integrate bandit for Python
-- Add snyk API integration
-
-## File Size & Performance
-
-- `analyzer.ts`: ~100 lines (rule engine)
-- `extension.ts`: ~900 lines (main logic + AI fix workflow)
-- `resultsPanel.ts`: ~810 lines (webview UI)
-- `resultsStore.ts`: ~180 lines (results storage)
-- `aiFixService.ts`: ~280 lines (AI provider abstraction)
-- `fixTracker.ts`: ~150 lines (issue status persistence)
-- `aiSettingsPanel.ts`: ~300 lines (settings webview)
-- `diagnosticsManager.ts`: ~60 lines
-- `configManager.ts`: ~150 lines
-- `statusBarManager.ts`: ~85 lines
-- `rules/`: ~14 files with 133+ security rules
-- **Total**: ~3000+ lines of TypeScript
+| File | Lines | Purpose |
+|------|-------|---------|
+| `extension.ts` | ~1230 | Main entry, commands, scanning, AI fix workflow |
+| `resultsPanel.ts` | ~810 | Webview results panel |
+| `analyzer.ts` | ~360 | Rule engine with context-aware analysis |
+| `aiFixService.ts` | ~280 | AI provider abstraction |
+| `aiSettingsPanel.ts` | ~300 | AI configuration webview |
+| `resultsStore.ts` | ~180 | Results storage + SARIF export |
+| `configManager.ts` | ~160 | Configuration management |
+| `fixTracker.ts` | ~150 | Issue status persistence |
+| `contextExtractor.ts` | ~120 | Function scope + variable tracing |
+| `confidenceAnalyzer.ts` | ~80 | Confidence classification |
+| `caspianIgnore.ts` | ~80 | Ignore file parsing |
+| `statusBarManager.ts` | ~85 | Status bar integration |
+| `diagnosticsManager.ts` | ~60 | VS Code diagnostics |
+| `gitIntegration.ts` | ~50 | Git SCM integration |
+| `dependencyChecker.ts` | ~200 | Dependency + stack checking |
+| `rules/` (14 files) | ~1200 | 133+ security rule definitions |
+| **Total** | **~5300+** | |
 
 **Memory usage**: ~5-10 MB
-**Analysis time**: ~50-200ms per file (language dependent)
-
-## Testing Strategy
-
-### Unit Tests (Future)
-- Test each rule individually
-- Test pattern matching
-- Test config management
-
-### Integration Tests
-- Test with actual VS Code
-- Test with multiple file types
-- Test workspace-wide analysis
-
-### Performance Tests
-- Measure analysis time
-- Monitor memory usage
-- Test with large files
-
----
-
-This architecture ensures **modularity**, **maintainability**, and **extensibility** while keeping the codebase clean and focused on security analysis.
+**Analysis time**: ~50-200ms per file

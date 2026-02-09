@@ -4,6 +4,37 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [7.1.0] - 2026-02-09
+
+### Added
+
+- **Show Informational toggle** -- new `caspianSecurity.showInformational` setting (default: true) lets users hide best-practice reminders and see only actionable security findings
+- **Internal path severity reduction** -- new `caspianSecurity.reduceInternalPathSeverity` setting automatically downgrades severity for files in `/admin/`, `/scripts/`, `/internal/`, `/seed/`, `/migrations/`, `/fixtures/`, and `/tools/` directories
+- **Informational rule line targeting** -- informational rules now collect multiple candidate matches and pick the most relevant line (preferring function bodies over imports and declarations) instead of firing on the first match
+
+### Changed
+
+- **DB011** (Default Credentials) -- fixed regex that incorrectly matched empty password initialization (`let password = ""`); added negative patterns for password generation contexts (`crypto.randomBytes`, `generatePassword`, etc.)
+- **LOG005** (Password in Logs) -- rewritten patterns to require password as a variable reference, not just the word appearing inside a string literal; no longer flags instruction strings like "Users have been created with temporary passwords"
+- **ENC010** (PII Logged Without Masking) -- now detects masking functions (`mask*()`, `redact*()`, `anonymize*()`) and suppresses when PII is already wrapped in protection; also checks nearby lines for masking patterns
+- **ENC007** (Sensitive Data Logged) -- added same masking detection and instruction-string suppression as ENC010
+- **BIZ007** (Client-side Quota) -- added negative patterns for database pagination terms (`limitCount`, `pageSize`, `.limit()`, `OFFSET`, `pagination`) to stop flagging Firestore/SQL query limits
+- **BIZ004** (Trial Period Logic) -- now excludes seed, fixture, migration, and mock files entirely; reduces severity in scripts/admin/tools directories
+- **FILE009** (Public Storage Bucket) -- replaced broad `/allUsers/i` pattern with context-specific patterns requiring cloud/IAM keywords on the same line; added negative patterns for JSX UI elements (`<SelectItem>`, `<MenuItem>`, etc.)
+- **XSS004** (dangerouslySetInnerHTML) -- now suppresses when `JSON.stringify`, `DOMPurify`, or sanitization functions are present on the same line or nearby; also suppresses near `application/ld+json` script tags
+
+### Fixed
+
+- DB011 false positive on empty password variable initialization in password generation functions
+- LOG005 false positive on instruction strings containing the word "password"
+- ENC010 false positive on PII already wrapped in masking functions like `maskEmail()`
+- BIZ007 false positive on Firestore `limitCount` pagination parameters
+- BIZ004 false positive on admin seed utilities populating trial-plan reference data
+- FILE009 false positive on `<SelectItem value="allUsers">` UI dropdown components
+- XSS004 false positive on `dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}` for JSON-LD metadata
+
+---
+
 ## [7.0.0] - 2026-02-07
 
 ### Added

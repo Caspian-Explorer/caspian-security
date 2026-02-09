@@ -26,6 +26,7 @@ What sets it apart: **context-aware intelligence**. The scanner classifies detec
 - **3 AI providers** -- Anthropic Claude, OpenAI GPT-4, and Google Gemini for fix generation
 - **Cancellable scans** -- workspace scans show progress and can be cancelled mid-run
 - **Configurable severity** -- filter diagnostics by error, warning, or info thresholds
+- **False positive controls** -- masking function detection, internal-path severity reduction, pagination-aware rules, and a toggle to hide informational reminders
 
 ---
 
@@ -222,6 +223,8 @@ Open VS Code Settings (`Ctrl+,`) and search for **"Caspian Security"** to config
 | `caspianSecurity.severity`          | string   | `warning` | Minimum severity level (`error`, `warning`, `info`) |
 | `caspianSecurity.enabledLanguages`  | array    | All 8     | Languages to include in security checks     |
 | `caspianSecurity.includeDependencyCheck` | boolean | `true` | Include dependency update and vulnerability checks during workspace scans |
+| `caspianSecurity.showInformational`      | boolean  | `true`    | Show informational reminders alongside security findings. Disable to see only actionable issues |
+| `caspianSecurity.reduceInternalPathSeverity` | boolean | `true` | Reduce severity for files in admin, scripts, internal, seed, and migration directories |
 
 ### AI Settings
 
