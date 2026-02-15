@@ -34,7 +34,13 @@ export const frontendRules: SecurityRule[] = [
     patterns: [
       /target\s*=\s*['"]_blank['"]/i,
     ],
-    suppressIfNearby: [/rel\s*=\s*['"][^'"]*noopener[^'"]*noreferrer[^'"]*['"]/i, /rel\s*=\s*['"][^'"]*noreferrer[^'"]*noopener[^'"]*['"]/i],
+    suppressIfNearby: [
+      /rel\s*=\s*['"][^'"]*noopener[^'"]*noreferrer[^'"]*['"]/i,
+      /rel\s*=\s*['"][^'"]*noreferrer[^'"]*noopener[^'"]*['"]/i,
+      // JSX/React style with curly braces
+      /rel\s*=\s*\{[^}]*noopener[^}]*noreferrer[^}]*\}/i,
+      /rel\s*=\s*\{[^}]*noreferrer[^}]*noopener[^}]*\}/i,
+    ],
     suggestion: 'Add rel="noopener noreferrer" to links with target="_blank" to prevent tab-nabbing',
     category: SecurityCategory.FrontendSecurity,
     ruleType: RuleType.Informational,

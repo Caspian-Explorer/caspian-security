@@ -56,8 +56,20 @@ export const secretsRules: SecurityRule[] = [
     message: 'Generic high-entropy secret in string literal',
     severity: SecuritySeverity.Warning,
     patterns: [
-      /['"][A-Za-z0-9+\/]{40,}={0,2}['"]/,
+      /['"][A-Za-z0-9+\/]{40,}={1,2}['"]/,  // Base64 with padding
+      /['"][A-Za-z0-9]*[+\/][A-Za-z0-9+\/]{35,}['"]/,  // Contains base64 special chars +/
     ],
+    negativePatterns: [
+      /\b(?:t|i18n|translate|__)\s*\(/i,  // Translation functions
+      /\.(?:t|i18n|translate)\s*\(/i,  // Object method translation calls
+      /['"][^'"]*\/[^'"]*\/[^'"]*['"]/,  // Paths with 2+ slashes
+      /['"][^'"]*\.[^'"]*\.[^'"]+['"]/,  // URLs with multiple dots
+      /['"][^'"]*-[^'"]*-[^'"]*['"]/,  // UUIDs with dashes
+      /mock|stub|fixture|test|spec/i,  // Test data
+      /const\s+\w{30,}\s*=/i,  // Long constant names
+      /export\s+const\s+\w{30,}\s*=/i,  // Exported long constant names
+    ],
+    contextAware: true,  // Skip matches in comments
     suggestion: 'Review this string literal: if it is a secret or token, move it to environment variables',
     category: SecurityCategory.SecretsCredentials,
     ruleType: RuleType.CodeDetectable,

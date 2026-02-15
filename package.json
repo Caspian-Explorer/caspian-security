@@ -339,6 +339,11 @@
           "default": true,
           "description": "Reduce severity for files in admin, scripts, internal, and seed directories"
         },
+        "caspianSecurity.skipGeneratedFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Skip scanning auto-generated and minified files (detected by @generated markers, file patterns, or minification heuristics)"
+        },
         "caspianSecurity.aiModel": {
           "type": "string",
           "default": "",

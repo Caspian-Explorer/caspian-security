@@ -37,6 +37,11 @@ export const encryptionRules: SecurityRule[] = [
     patterns: [
       /['"]http:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0)/i,
     ],
+    negativePatterns: [
+      /example\.com|example\.org|example\.net/i,  // Documentation examples
+      /\[.*\]\(http/i,  // Markdown links in comments
+    ],
+    contextAware: true,  // Skip matches in comments and strings
     suggestion: 'Use HTTPS for all external communications to prevent MITM attacks',
     category: SecurityCategory.EncryptionDataProtection,
     ruleType: RuleType.CodeDetectable,
@@ -147,7 +152,10 @@ export const encryptionRules: SecurityRule[] = [
     message: 'PII field logged without masking',
     severity: SecuritySeverity.Warning,
     patterns: [
-      /(?:console\.log|logger\.\w+|print)\s*\(.*(?:email|phone|address|name|dob|birth)/i,
+      // Match object properties: user.email, data.phone, record.ssn
+      /(?:console\.log|logger\.\w+|print)\s*\([^)]*\b\w+\.(?:email|phone|address|ssn|social.?security|credit.?card|passport)\b/i,
+      // Match PII-prefixed variables: userEmail, customerPhone
+      /(?:console\.log|logger\.\w+|print)\s*\([^)]*\b(?:user|customer|client|person)(?:Email|Phone|Address|SSN|Passport)\b/i,
     ],
     negativePatterns: [
       /mask\w*\s*\(/i,
@@ -158,6 +166,14 @@ export const encryptionRules: SecurityRule[] = [
       /\.slice\s*\(\s*-?\d/i,
       /\.substring\s*\(/i,
       /\.replace\s*\(.*\*/i,
+      // Exclude non-PII variables containing these words
+      /filename|filepath|pathname|dirname|basename/i,
+      /classname|typename|tagname|nodename|elementname/i,
+      /username|hostname|servername|databasename/i,
+      /languagename|frameworkname|packagename/i,
+      /displayname|appname|sitename/i,
+      /email.*config|config.*email/i,  // Email configuration
+      /schema|model|interface|type\s+\w+/i,  // Type definitions
     ],
     suppressIfNearby: [
       /mask\w*\s*\(/i,

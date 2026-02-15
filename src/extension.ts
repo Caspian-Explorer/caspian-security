@@ -101,7 +101,7 @@ export function activate(context: vscode.ExtensionContext) {
   try {
     console.log('Caspian Security Extension activated');
 
-    configManager = new ConfigManager();
+    configManager = ConfigManager.getInstance();
     diagnosticsManager = new DiagnosticsManager();
     analyzer = new SecurityAnalyzer();
     resultsStore = new ResultsStore();

@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { SecurityRule, SecurityIssue, SecurityCategory, SecuritySeverity, RuleType, ProjectAdvisory } from './types';
 import { getAllRules, getRulesByCategory, getRuleByCode as registryGetRuleByCode } from './rules';
 import { classifyConfidence } from './confidenceAnalyzer';
+import { isGeneratedFile } from './generatedFileDetector';
+import { ConfigManager } from './configManager';
 
 export class SecurityAnalyzer {
   private allRules: SecurityRule[];
@@ -22,6 +24,12 @@ export class SecurityAnalyzer {
       const informationalFired = new Set<string>();
       const informationalCandidates = new Map<string, SecurityIssue[]>();
       const filePath = document.uri.fsPath;
+
+      // Skip generated files if enabled
+      const config = ConfigManager.getInstance();
+      if (config.getSkipGeneratedFiles() && isGeneratedFile(filePath, text)) {
+        return [];
+      }
 
       for (let lineNum = 0; lineNum < lines.length; lineNum++) {
         const line = lines[lineNum];
@@ -107,13 +115,12 @@ export class SecurityAnalyzer {
                 }
               }
 
-              // SuppressIfNearby: check surrounding lines for suppression patterns
+              // SuppressIfNearby: check surrounding lines (including current) for suppression patterns
               if (rule.suppressIfNearby) {
                 let suppressed = false;
                 const startLine = Math.max(0, lineNum - 3);
                 const endLine = Math.min(lines.length - 1, lineNum + 3);
                 for (let nearby = startLine; nearby <= endLine; nearby++) {
-                  if (nearby === lineNum) { continue; }
                   for (const suppressPattern of rule.suppressIfNearby) {
                     if (suppressPattern.test(lines[nearby])) {
                       suppressed = true;

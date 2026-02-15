@@ -30,10 +30,11 @@ export const LANGUAGE_EXTENSIONS: Record<string, string[]> = {
 };
 
 export class ConfigManager {
+  private static instance: ConfigManager;
   private config: vscode.WorkspaceConfiguration;
   private configChangeDisposable: vscode.Disposable;
 
-  constructor() {
+  private constructor() {
     this.config = vscode.workspace.getConfiguration('caspianSecurity');
 
     this.configChangeDisposable = vscode.workspace.onDidChangeConfiguration((event) => {
@@ -41,6 +42,13 @@ export class ConfigManager {
         this.config = vscode.workspace.getConfiguration('caspianSecurity');
       }
     });
+  }
+
+  static getInstance(): ConfigManager {
+    if (!ConfigManager.instance) {
+      ConfigManager.instance = new ConfigManager();
+    }
+    return ConfigManager.instance;
   }
 
   dispose(): void {
@@ -130,6 +138,14 @@ export class ConfigManager {
 
   getReduceInternalPathSeverity(): boolean {
     return this.config.get('reduceInternalPathSeverity', true);
+  }
+
+  getSkipGeneratedFiles(): boolean {
+    return this.config.get('skipGeneratedFiles', true);
+  }
+
+  setSkipGeneratedFiles(value: boolean): void {
+    this.config.update('skipGeneratedFiles', value, vscode.ConfigurationTarget.Global);
   }
 
   getAIProvider(): string {
