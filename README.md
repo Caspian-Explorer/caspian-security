@@ -26,7 +26,7 @@ What sets it apart: **context-aware intelligence**. The scanner classifies detec
 - **3 AI providers** -- Anthropic Claude, OpenAI GPT-4, and Google Gemini for fix generation
 - **Cancellable scans** -- workspace scans show progress and can be cancelled mid-run
 - **Configurable severity** -- filter diagnostics by error, warning, or info thresholds
-- **False positive controls** -- masking function detection, internal-path severity reduction, pagination-aware rules, and a toggle to hide informational reminders
+- **False positive controls** -- context-aware rules, generated file detection, masking function detection, internal-path severity reduction, pagination-aware rules, and a toggle to hide informational reminders
 
 ---
 
