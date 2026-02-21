@@ -4,6 +4,14 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [7.2.1] - 2026-02-21
+
+### Added
+
+- **Version bump step in CLAUDE.md** — pre-commit checklist now includes automatic version increment (patch by default) with `package.json`, `CHANGELOG.md`, and `package-lock.json` sync
+
+---
+
 ## [7.2.0] - 2026-02-15
 
 ### Added
