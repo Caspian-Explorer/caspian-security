@@ -55,6 +55,10 @@ export class ConfigManager {
     this.configChangeDisposable.dispose();
   }
 
+  get<T>(key: string, defaultValue: T): T {
+    return this.config.get<T>(key, defaultValue);
+  }
+
   getAutoCheck(): boolean {
     return this.config.get('autoCheck', true);
   }

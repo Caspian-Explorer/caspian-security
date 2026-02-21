@@ -15,6 +15,10 @@ import { FixTracker } from './fixTracker';
 import { AISettingsPanel } from './aiSettingsPanel';
 import { extractSmartContext } from './contextExtractor';
 import { loadIgnoreFile, appendIgnoreEntry, isIgnored, IgnoreEntry } from './caspianIgnore';
+import { PersistenceManager } from './persistenceManager';
+import { FileStateTracker, FileChangeStatus } from './fileStateTracker';
+import { FalsePositiveStore } from './falsePositiveStore';
+import { ScanHistoryStore } from './scanHistoryStore';
 
 const BATCH_SIZE = 50;
 
@@ -96,6 +100,9 @@ let fixTracker: FixTracker;
 let aiSettingsPanel: AISettingsPanel;
 let fixPreviewProvider: FixPreviewContentProvider;
 let ignoreEntries: IgnoreEntry[] = [];
+let fileStateTracker: FileStateTracker;
+let falsePositiveStore: FalsePositiveStore;
+let scanHistoryStore: ScanHistoryStore;
 
 export function activate(context: vscode.ExtensionContext) {
   try {
@@ -127,6 +134,34 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
       vscode.workspace.registerTextDocumentContentProvider('caspian-fix-preview', fixPreviewProvider)
     );
+
+    // Initialize persistence layer for scan caching and false positive memory
+    const storageUri = context.storageUri || context.globalStorageUri;
+    PersistenceManager.initialize(storageUri);
+    fileStateTracker = new FileStateTracker();
+    falsePositiveStore = new FalsePositiveStore(fileStateTracker);
+    scanHistoryStore = new ScanHistoryStore();
+    context.subscriptions.push(PersistenceManager.getInstance());
+    context.subscriptions.push(fileStateTracker);
+    context.subscriptions.push(falsePositiveStore);
+    context.subscriptions.push(scanHistoryStore);
+
+    // Connect scan history to status bar
+    statusBarManager.setScanHistoryStore(scanHistoryStore);
+
+    // Load persistence stores (non-blocking) and restore cached results
+    Promise.all([
+      fileStateTracker.load(),
+      falsePositiveStore.load(),
+      scanHistoryStore.load(),
+    ]).then(() => {
+      const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (wsRoot && configManager.get<boolean>('enablePersistentCache', true)) {
+        restoreCachedResults(wsRoot);
+      }
+    }).catch(error => {
+      console.error('Caspian Security: Failed to load persistence stores:', error);
+    });
 
     // Initialize git integration (non-blocking)
     gitIntegration.initialize();
@@ -425,6 +460,95 @@ function registerCommands(context: vscode.ExtensionContext) {
       await runDependencyCheck();
     })
   );
+
+  // New command: Mark as False Positive
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.markFalsePositive', async (issueData: {
+      filePath: string; relativePath: string; line: number; code: string; pattern: string;
+    }) => {
+      if (!falsePositiveStore || !issueData) { return; }
+
+      const reason = await vscode.window.showInputBox({
+        prompt: `Why is ${issueData.code} a false positive? (optional)`,
+        placeHolder: 'e.g. Variable is always sanitized before use',
+      });
+
+      // User pressed Escape — cancel
+      if (reason === undefined) { return; }
+
+      await falsePositiveStore.dismiss(
+        issueData.relativePath,
+        issueData.filePath,
+        issueData.code,
+        issueData.line,
+        issueData.pattern,
+        reason || undefined
+      );
+
+      vscode.window.showInformationMessage(
+        `${issueData.code} marked as false positive. It won't appear again unless the file changes.`
+      );
+
+      // Re-check the document to remove the finding from diagnostics
+      try {
+        const uri = vscode.Uri.file(issueData.filePath);
+        const document = await vscode.workspace.openTextDocument(uri);
+        await checkDocument(document);
+      } catch {
+        // File may not be open
+      }
+    })
+  );
+
+  // New command: Show Scan History
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.showScanHistory', async () => {
+      if (!scanHistoryStore) { return; }
+
+      const entries = scanHistoryStore.getEntries();
+      if (entries.length === 0) {
+        vscode.window.showInformationMessage('Caspian Security: No scan history yet');
+        return;
+      }
+
+      const items = entries.reverse().map(entry => ({
+        label: `$(clock) ${new Date(entry.timestamp).toLocaleString()}`,
+        description: `${entry.scanType} — ${entry.totalIssues} issue(s) in ${entry.totalFiles} files`,
+        detail: `Duration: ${(entry.duration / 1000).toFixed(1)}s`
+          + (entry.filesSkippedUnchanged > 0 ? ` | ${entry.filesSkippedUnchanged} cached` : '')
+          + (entry.falsePositivesFiltered > 0 ? ` | ${entry.falsePositivesFiltered} FP filtered` : ''),
+      }));
+
+      await vscode.window.showQuickPick(items, {
+        placeHolder: 'Scan History (most recent first)',
+        canPickMany: false,
+      });
+    })
+  );
+
+  // New command: Clear All False Positives
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.clearFalsePositives', async () => {
+      if (!falsePositiveStore) { return; }
+
+      const count = falsePositiveStore.getAllDismissals().length;
+      if (count === 0) {
+        vscode.window.showInformationMessage('Caspian Security: No false positive dismissals to clear');
+        return;
+      }
+
+      const choice = await vscode.window.showWarningMessage(
+        `Clear all ${count} false positive dismissal(s)? These findings will reappear on next scan.`,
+        'Clear All',
+        'Cancel'
+      );
+
+      if (choice === 'Clear All') {
+        falsePositiveStore.clearAll();
+        vscode.window.showInformationMessage('Caspian Security: All false positive dismissals cleared');
+      }
+    })
+  );
 }
 
 function registerCategoryCommands(context: vscode.ExtensionContext) {
@@ -546,6 +670,11 @@ async function checkDocument(document: vscode.TextDocument, categories?: Securit
       ? allIssues.filter(issue => !isIgnored(ignoreEntries, issue.code, relativePath, issue.line))
       : allIssues;
 
+    // Filter out false positives
+    if (falsePositiveStore) {
+      issues = falsePositiveStore.filterFalsePositives(relativePath, issues);
+    }
+
     // Filter out informational findings if the user has disabled them
     if (!configManager.getShowInformational()) {
       issues = issues.filter(issue => issue.severity !== SecuritySeverity.Info);
@@ -585,6 +714,11 @@ async function checkDocument(document: vscode.TextDocument, categories?: Securit
       scannedAt: new Date(),
     });
     updateHasResultsContext();
+
+    // Record file state for persistent caching
+    if (fileStateTracker) {
+      fileStateTracker.recordScan(relativePath, document.uri.fsPath, document.languageId, issues);
+    }
 
     if (issues.length > 0) {
       console.log(`Found ${issues.length} security issues`);
@@ -628,10 +762,14 @@ async function runWorkspaceCheck() {
 
   let totalIssueCount = 0;
   let totalFilesScanned = 0;
+  let totalFilesSkipped = 0;
+  let totalFalsePositivesFiltered = 0;
   const startTime = Date.now();
 
   resultsStore.clearAll();
   statusBarManager.setState(ScanState.Scanning);
+
+  const skipUnchanged = configManager.get<boolean>('skipUnchangedFiles', true);
 
   let userStopped = false;
 
@@ -670,9 +808,48 @@ async function runWorkspaceCheck() {
 
           statusBarManager.showScanning(relativePath);
 
+          // Skip unchanged files if caching is enabled
+          if (skipUnchanged && fileStateTracker) {
+            const changeStatus = await fileStateTracker.getFileChangeStatus(relativePath, file.fsPath);
+            if (changeStatus === FileChangeStatus.Unchanged) {
+              const cachedIssues = fileStateTracker.getCachedIssues(relativePath);
+              if (cachedIssues !== undefined) {
+                // Apply false positive filtering to cached results
+                let issues = falsePositiveStore
+                  ? falsePositiveStore.filterFalsePositives(relativePath, cachedIssues)
+                  : cachedIssues;
+
+                const document = await vscode.workspace.openTextDocument(file);
+                const diagnostics = diagnosticsManager.createDiagnostics(document, issues);
+                diagnosticsManager.publishDiagnostics(document.uri, diagnostics);
+
+                resultsStore.setFileResults(document.uri.toString(), {
+                  filePath: document.uri.fsPath,
+                  relativePath,
+                  languageId: document.languageId,
+                  issues,
+                  scannedAt: new Date(),
+                });
+
+                batchIssueCount += issues.length;
+                batchFilesScanned++;
+                totalFilesSkipped++;
+                continue;
+              }
+            }
+          }
+
           const document = await vscode.workspace.openTextDocument(file);
           const categories = configManager.getEnabledCategories();
-          const issues = await analyzer.analyzeDocument(document, categories);
+          let issues = await analyzer.analyzeDocument(document, categories);
+
+          // Apply false positive filtering
+          if (falsePositiveStore) {
+            const beforeCount = issues.length;
+            issues = falsePositiveStore.filterFalsePositives(relativePath, issues);
+            totalFalsePositivesFiltered += beforeCount - issues.length;
+          }
+
           const diagnostics = diagnosticsManager.createDiagnostics(document, issues);
           diagnosticsManager.publishDiagnostics(document.uri, diagnostics);
 
@@ -683,6 +860,11 @@ async function runWorkspaceCheck() {
             issues,
             scannedAt: new Date(),
           });
+
+          // Record file state for caching
+          if (fileStateTracker) {
+            fileStateTracker.recordScan(relativePath, file.fsPath, document.languageId, issues);
+          }
 
           batchIssueCount += issues.length;
           batchFilesScanned++;
@@ -761,9 +943,31 @@ async function runWorkspaceCheck() {
   statusBarManager.showComplete();
   updateHasResultsContext();
 
+  // Record scan history
+  if (scanHistoryStore) {
+    const summary = resultsStore.getSummary();
+    scanHistoryStore.recordScan({
+      timestamp: new Date().toISOString(),
+      scanType: userStopped ? 'workspace (partial)' : 'workspace',
+      duration,
+      totalFiles: totalFilesScanned,
+      totalIssues: totalIssueCount,
+      falsePositivesFiltered: totalFalsePositivesFiltered,
+      filesSkippedUnchanged: totalFilesSkipped,
+      bySeverity: summary.bySeverity,
+      byCategory: summary.byCategory,
+    });
+  }
+
+  // Save file state cache
+  if (fileStateTracker) {
+    fileStateTracker.save();
+  }
+
+  const skippedNote = totalFilesSkipped > 0 ? ` (${totalFilesSkipped} cached)` : '';
   const advisoryNote = allAdvisories.length > 0 ? ` + ${allAdvisories.length} advisory(ies)` : '';
   vscode.window.showInformationMessage(
-    `Caspian Security: Scan ${userStopped ? 'stopped' : 'complete'} — ${totalIssueCount} issue(s) found in ${totalFilesScanned} files${advisoryNote}`
+    `Caspian Security: Scan ${userStopped ? 'stopped' : 'complete'} — ${totalIssueCount} issue(s) found in ${totalFilesScanned} files${skippedNote}${advisoryNote}`
   );
 
   resultsPanel.show();
@@ -825,7 +1029,13 @@ async function runUncommittedCheck() {
 
         const document = await vscode.workspace.openTextDocument(supportedFiles[i]);
         const categories = configManager.getEnabledCategories();
-        const issues = await analyzer.analyzeDocument(document, categories);
+        let issues = await analyzer.analyzeDocument(document, categories);
+
+        // Apply false positive filtering
+        if (falsePositiveStore) {
+          issues = falsePositiveStore.filterFalsePositives(relativePath, issues);
+        }
+
         const diagnostics = diagnosticsManager.createDiagnostics(document, issues);
         diagnosticsManager.publishDiagnostics(document.uri, diagnostics);
 
@@ -836,6 +1046,11 @@ async function runUncommittedCheck() {
           issues,
           scannedAt: new Date(),
         });
+
+        // Record file state for caching
+        if (fileStateTracker) {
+          fileStateTracker.recordScan(relativePath, supportedFiles[i].fsPath, document.languageId, issues);
+        }
 
         issueCount += issues.length;
       }
@@ -869,6 +1084,27 @@ async function runUncommittedCheck() {
   resultsStore.setScanMeta(duration, 'uncommitted');
   statusBarManager.showComplete();
   updateHasResultsContext();
+
+  // Record scan history
+  if (scanHistoryStore) {
+    const summary = resultsStore.getSummary();
+    scanHistoryStore.recordScan({
+      timestamp: new Date().toISOString(),
+      scanType: 'uncommitted',
+      duration,
+      totalFiles: supportedFiles.length,
+      totalIssues: issueCount,
+      falsePositivesFiltered: 0,
+      filesSkippedUnchanged: 0,
+      bySeverity: summary.bySeverity,
+      byCategory: summary.byCategory,
+    });
+  }
+
+  // Save file state cache
+  if (fileStateTracker) {
+    fileStateTracker.save();
+  }
 
   vscode.window.showInformationMessage(
     `Caspian Security: Scan complete — ${issueCount} issue(s) found in ${supportedFiles.length} uncommitted files`
@@ -1247,6 +1483,31 @@ class FixPreviewContentProvider implements vscode.TextDocumentContentProvider {
 
   provideTextDocumentContent(uri: vscode.Uri): string {
     return this.contents.get(uri.toString()) || '';
+  }
+}
+
+function restoreCachedResults(workspaceRoot: string): void {
+  if (!fileStateTracker) { return; }
+
+  let restoredCount = 0;
+  for (const [relativePath, state] of fileStateTracker.getAllStates()) {
+    if (state.cachedIssues.length > 0) {
+      const uri = vscode.Uri.file(path.join(workspaceRoot, relativePath));
+      resultsStore.setFileResults(uri.toString(), {
+        filePath: uri.fsPath,
+        relativePath,
+        languageId: state.languageId,
+        issues: state.cachedIssues,
+        scannedAt: new Date(state.lastScannedAt),
+      });
+      restoredCount++;
+    }
+  }
+
+  if (restoredCount > 0) {
+    updateHasResultsContext();
+    statusBarManager.showComplete();
+    console.log(`Caspian Security: Restored cached results for ${restoredCount} file(s)`);
   }
 }
 

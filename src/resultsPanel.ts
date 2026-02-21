@@ -207,6 +207,10 @@ export class ResultsPanel implements vscode.Disposable {
         await vscode.commands.executeCommand('caspian-security.verifyIssue', message.issueData);
         break;
       }
+      case 'markFalsePositive': {
+        await vscode.commands.executeCommand('caspian-security.markFalsePositive', message.issueData);
+        break;
+      }
     }
   }
 
@@ -471,6 +475,16 @@ export class ResultsPanel implements vscode.Disposable {
       border-radius: 2px;
     }
     .btn-ignore:hover { background: var(--vscode-button-secondaryHoverBackground); }
+    .btn-fp {
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+      border: 1px solid var(--vscode-descriptionForeground);
+      padding: 2px 8px;
+      cursor: pointer;
+      font-size: 11px;
+      border-radius: 2px;
+    }
+    .btn-fp:hover { background: var(--vscode-button-secondaryHoverBackground); }
     .btn-reset {
       background: transparent;
       color: var(--vscode-descriptionForeground);
@@ -776,7 +790,8 @@ export class ResultsPanel implements vscode.Disposable {
     // pending
     return badge + '<button class="btn-fix" data-key="' + escapeAttr(item.issueKey) + '">AI Fix</button>'
       + '<button class="btn-verify" data-key="' + escapeAttr(item.issueKey) + '">Verify</button>'
-      + '<button class="btn-ignore" data-key="' + escapeAttr(item.issueKey) + '">Ignore</button>';
+      + '<button class="btn-ignore" data-key="' + escapeAttr(item.issueKey) + '">Ignore</button>'
+      + '<button class="btn-fp" data-key="' + escapeAttr(item.issueKey) + '">False Positive</button>';
   }
 
   function renderTable() {
@@ -805,7 +820,7 @@ export class ResultsPanel implements vscode.Disposable {
     // Navigate on row click (but not on button clicks)
     resultsBody.querySelectorAll('tr.issue-row, tr.suggestion-row').forEach(row => {
       row.addEventListener('click', (e) => {
-        if (e.target.closest('.btn-fix') || e.target.closest('.btn-ignore') || e.target.closest('.btn-reset') || e.target.closest('.btn-verify')) return;
+        if (e.target.closest('.btn-fix') || e.target.closest('.btn-ignore') || e.target.closest('.btn-reset') || e.target.closest('.btn-verify') || e.target.closest('.btn-fp')) return;
         const file = row.getAttribute('data-file');
         const line = parseInt(row.getAttribute('data-line'));
         const col = parseInt(row.getAttribute('data-col'));
@@ -872,6 +887,24 @@ export class ResultsPanel implements vscode.Disposable {
         if (item) {
           vscode.postMessage({
             type: 'verifyIssue',
+            issueData: {
+              filePath: item.filePath, relativePath: item.relativePath,
+              line: item.line, code: item.code, pattern: item.pattern,
+            }
+          });
+        }
+      });
+    });
+
+    // False Positive buttons
+    resultsBody.querySelectorAll('.btn-fp').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const key = btn.getAttribute('data-key');
+        const item = findItemByKey(key);
+        if (item) {
+          vscode.postMessage({
+            type: 'markFalsePositive',
             issueData: {
               filePath: item.filePath, relativePath: item.relativePath,
               line: item.line, code: item.code, pattern: item.pattern,
