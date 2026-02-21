@@ -8,6 +8,8 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ### Added
 
+- **CLAUDE.md standing instructions** — pre-commit checklist enforcing lint, compile, code review, documentation updates, and packaging verification for every commit via Claude Code
+
 - **Generated file detection** -- new `caspianSecurity.skipGeneratedFiles` setting (default: true) automatically skips scanning of auto-generated and minified files
   - Detects by path patterns (`.min.js`, `.bundle.js`, `workbox-*.js`, `sw.js`, `/dist/`, `/build/`, `/__generated__/`, etc.)
   - Detects by content markers (`@generated`, `@auto-generated`, `do not edit`, `code generator`, etc.)
