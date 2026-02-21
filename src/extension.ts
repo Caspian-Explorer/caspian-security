@@ -11,7 +11,7 @@ import { ResultsPanel } from './resultsPanel';
 import { GitIntegration } from './gitIntegration';
 import { checkDependencies, formatResultsAsText, DependencyCheckResult } from './dependencyChecker';
 import { AIFixService, AIProviderConfig, AIFixRequest, AIFixError } from './aiFixService';
-import { FixTracker } from './fixTracker';
+import { FixTracker, FixStatus } from './fixTracker';
 import { AISettingsPanel } from './aiSettingsPanel';
 import { extractSmartContext } from './contextExtractor';
 import { loadIgnoreFile, appendIgnoreEntry, isIgnored, IgnoreEntry } from './caspianIgnore';
@@ -386,6 +386,93 @@ function registerCommands(context: vscode.ExtensionContext) {
     })
   );
 
+  // Verify all fixed issues at once
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.verifyAllFixes', async () => {
+      const allRecords = fixTracker.getAllRecords();
+      const fixedRecords = allRecords.filter(r => r.status === FixStatus.Fixed);
+
+      if (fixedRecords.length === 0) {
+        vscode.window.showInformationMessage('Caspian Security: No fixed issues to verify.');
+        return;
+      }
+
+      // Group by file to avoid re-scanning the same file multiple times
+      const byFile = new Map<string, typeof fixedRecords>();
+      for (const record of fixedRecords) {
+        const key = record.filePath;
+        if (!byFile.has(key)) {
+          byFile.set(key, []);
+        }
+        byFile.get(key)!.push(record);
+      }
+
+      let verifiedCount = 0;
+      let stillPresentCount = 0;
+      let errorCount = 0;
+
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'Caspian Security: Verifying fixes',
+          cancellable: true,
+        },
+        async (progress, token) => {
+          const fileEntries = Array.from(byFile.entries());
+          for (let i = 0; i < fileEntries.length; i++) {
+            if (token.isCancellationRequested) { break; }
+
+            const [filePath, records] = fileEntries[i];
+            const relativePath = records[0].relativePath;
+
+            progress.report({
+              message: `(${i + 1}/${fileEntries.length}) ${relativePath}`,
+              increment: (1 / fileEntries.length) * 100,
+            });
+
+            try {
+              const uri = vscode.Uri.file(filePath);
+              const document = await vscode.workspace.openTextDocument(uri);
+              await checkDocument(document);
+
+              const updatedResults = resultsStore.getFileResults(uri.toString());
+              for (const record of records) {
+                const stillPresent = updatedResults?.issues.some(
+                  issue => issue.code === record.issueCode && issue.line === record.issueLine
+                );
+
+                if (stillPresent) {
+                  stillPresentCount++;
+                } else {
+                  fixTracker.markVerified(
+                    record.issueKey,
+                    record.filePath,
+                    record.relativePath,
+                    record.issueCode,
+                    record.issueLine,
+                    record.issuePattern
+                  );
+                  verifiedCount++;
+                }
+              }
+            } catch (error) {
+              errorCount += records.length;
+              console.error(`Caspian Security: Failed to verify file ${filePath}:`, error);
+            }
+          }
+        }
+      );
+
+      const parts: string[] = [];
+      if (verifiedCount > 0) { parts.push(`${verifiedCount} verified`); }
+      if (stillPresentCount > 0) { parts.push(`${stillPresentCount} still present`); }
+      if (errorCount > 0) { parts.push(`${errorCount} failed`); }
+      vscode.window.showInformationMessage(
+        `Caspian Security: Verify All complete — ${parts.join(', ')}.`
+      );
+    })
+  );
+
   // Reset fix tracker
   context.subscriptions.push(
     vscode.commands.registerCommand('caspian-security.resetFixTracker', () => {
@@ -753,12 +840,14 @@ async function runWorkspaceCheck() {
   const estimate = buildScanEstimate(files, batches);
   const startChoice = await vscode.window.showInformationMessage(
     `Caspian Security: ${estimate}`,
-    'Start Scan',
+    'Run All',
+    'Step-by-Step',
     'Cancel'
   );
-  if (startChoice !== 'Start Scan') {
+  if (startChoice !== 'Run All' && startChoice !== 'Step-by-Step') {
     return;
   }
+  const skipBatchConfirmations = startChoice === 'Run All';
 
   let totalIssueCount = 0;
   let totalFilesScanned = 0;
@@ -882,7 +971,7 @@ async function runWorkspaceCheck() {
     }
 
     const isLastBatch = batchIndex === batches.length - 1;
-    if (!isLastBatch) {
+    if (!isLastBatch && !skipBatchConfirmations) {
       const nextBatch = batches[batchIndex + 1];
       const remainingBatches = batches.length - batchIndex - 1;
       const remainingFiles = batches.slice(batchIndex + 1).reduce((sum, b) => sum + b.files.length, 0);

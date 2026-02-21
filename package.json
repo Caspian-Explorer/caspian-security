@@ -87,6 +87,10 @@
         "title": "Caspian Security: Verify Issue Resolution"
       },
       {
+        "command": "caspian-security.verifyAllFixes",
+        "title": "Caspian Security: Verify All Fixes"
+      },
+      {
         "command": "caspian-security.check-auth-access-control",
         "title": "Caspian Security: Check Authentication & Access Control"
       },
@@ -211,6 +215,10 @@
         {
           "command": "caspian-security.verifyIssue",
           "when": "false"
+        },
+        {
+          "command": "caspian-security.verifyAllFixes",
+          "when": "caspian-security.hasResults"
         },
         {
           "command": "caspian-security.markFalsePositive",

@@ -211,6 +211,10 @@ export class ResultsPanel implements vscode.Disposable {
         await vscode.commands.executeCommand('caspian-security.markFalsePositive', message.issueData);
         break;
       }
+      case 'verifyAllFixes': {
+        await vscode.commands.executeCommand('caspian-security.verifyAllFixes');
+        break;
+      }
     }
   }
 
@@ -513,6 +517,16 @@ export class ResultsPanel implements vscode.Disposable {
       margin-right: 4px;
     }
     .btn-verify:hover { background: #45a049; }
+    .btn-verify-all {
+      background: #4caf50;
+      color: white;
+      border: none;
+      padding: 4px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      border-radius: 3px;
+    }
+    .btn-verify-all:hover { background: #45a049; }
 
     tr.issue-row.row-fixed { opacity: 0.6; }
     tr.issue-row.row-ignored { opacity: 0.5; }
@@ -525,6 +539,7 @@ export class ResultsPanel implements vscode.Disposable {
     <h1>Caspian Security Results</h1>
     <div class="header-actions">
       <button class="btn" id="btn-ai-settings" title="Configure AI provider">AI Settings</button>
+      <button class="btn btn-verify-all" id="btn-verify-all" title="Verify all fixed issues" style="display:none;">Verify All Fixes</button>
       <button class="btn btn-secondary" id="btn-copy" title="Copy all results to clipboard">Copy All</button>
       <button class="btn btn-secondary" id="btn-csv" title="Export results as CSV">Export CSV</button>
       <button class="btn btn-secondary" id="btn-json" title="Export results as JSON">Export JSON</button>
@@ -667,6 +682,9 @@ export class ResultsPanel implements vscode.Disposable {
   document.getElementById('btn-sarif').addEventListener('click', () => {
     vscode.postMessage({ type: 'exportSARIF' });
   });
+  document.getElementById('btn-verify-all').addEventListener('click', () => {
+    vscode.postMessage({ type: 'verifyAllFixes' });
+  });
 
   // Advisories toggle
   let advisoriesExpanded = true;
@@ -687,6 +705,10 @@ export class ResultsPanel implements vscode.Disposable {
       renderSummary(msg.data.summary);
       renderFixProgress(msg.data.fixSummary);
       renderAdvisories(msg.data.projectAdvisories || []);
+
+      // Show/hide the Verify All Fixes button
+      const hasFixedIssues = allResults.some(r => r.fixStatus === 'fixed');
+      document.getElementById('btn-verify-all').style.display = hasFixedIssues ? 'inline-block' : 'none';
     }
   });
 
