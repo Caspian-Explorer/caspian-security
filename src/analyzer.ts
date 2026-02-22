@@ -2,14 +2,26 @@ import * as vscode from 'vscode';
 import { SecurityRule, SecurityIssue, SecurityCategory, SecuritySeverity, RuleType, ProjectAdvisory } from './types';
 import { getAllRules, getRulesByCategory, getRuleByCode as registryGetRuleByCode } from './rules';
 import { classifyConfidence } from './confidenceAnalyzer';
+import { AdaptiveConfidenceEngine } from './adaptiveConfidence';
+import { CodebaseProfile } from './codebaseProfile';
 import { isGeneratedFile } from './generatedFileDetector';
 import { ConfigManager } from './configManager';
 
 export class SecurityAnalyzer {
   private allRules: SecurityRule[];
+  private adaptiveConfidence: AdaptiveConfidenceEngine | undefined;
+  private codebaseProfile: CodebaseProfile | undefined;
 
   constructor() {
     this.allRules = getAllRules();
+  }
+
+  setAdaptiveConfidence(engine: AdaptiveConfidenceEngine): void {
+    this.adaptiveConfidence = engine;
+  }
+
+  setCodebaseProfile(profile: CodebaseProfile): void {
+    this.codebaseProfile = profile;
   }
 
   async analyzeDocument(
@@ -134,6 +146,12 @@ export class SecurityAnalyzer {
                 }
               }
 
+              // Learned safe pattern suppression
+              if (this.codebaseProfile &&
+                  this.codebaseProfile.hasLearnedSuppression(rule.code, line, lines, lineNum)) {
+                continue;
+              }
+
               // Determine effective severity (file-pattern-based reduction)
               let effectiveSeverity = rule.severity;
               if (rule.filePatterns?.reduceSeverityIn) {
@@ -142,9 +160,12 @@ export class SecurityAnalyzer {
                 }
               }
 
-              const confidenceLevel = classifyConfidence(
-                lines, lineNum, column, matchText, rule.code
-              );
+              const confidenceLevel = this.adaptiveConfidence
+                ? this.adaptiveConfidence.classify(
+                    lines, lineNum, column, matchText, rule.code,
+                    document.languageId, filePath
+                  )
+                : classifyConfidence(lines, lineNum, column, matchText, rule.code);
 
               const issue: SecurityIssue = {
                 line: lineNum,

@@ -31,9 +31,24 @@
 │- Claude│ │- Rule engine │ │- Create     │ │- Settings  │ │- File results│
 │- OpenAI│ │- Pattern     │ │- Publish    │ │- Categories│ │- JSON/CSV    │
 │- Gemini│ │  matching    │ │- Severity   │ │- Languages │ │- SARIF export│
-└────────┘ │- Context     │ └─────────────┘ └────────────┘ └──────────────┘
-           │  awareness   │
-           └──────┬───────┘
+└───┬────┘ │- Context     │ └─────────────┘ └────────────┘ └──────────────┘
+    │      │  awareness   │
+    │      └──────┬───────┘
+    │             │
+    │    ┌────────▼──────────────────────────────────────────────────────┐
+    │    │              Learning Intelligence Layer                      │
+    │    │                                                              │
+    │    │ ┌─────────────┐ ┌──────────────┐ ┌────────────────────────┐ │
+    │    │ │   Rule      │ │  Adaptive    │ │  Fix Pattern Memory    │ │
+    │    │ │Intelligence │ │ Confidence   │ │  (instant fix replay)  │ │
+    │    │ └──────┬──────┘ └──────────────┘ └────────────────────────┘ │
+    │    │        │                                                     │
+    │    │ ┌──────▼──────┐ ┌──────────────┐ ┌────────────────────────┐ │
+    │    │ │  Codebase   │ │    Scan      │ │  Telemetry Service     │ │
+    │    │ │  Profile    │ │  Insights    │ │  (opt-in, anonymized)  │ │
+    │    │ └─────────────┘ └──────────────┘ └────────────────────────┘ │
+    │    └──────────────────────────────────────────────────────────────┘
+    │
                   │
     ┌─────────────┼─────────────────┬──────────────────┐
     │             │                 │                  │
@@ -63,10 +78,11 @@ For each line × each rule:
   3. Context-aware filtering (skip comments, strings, JSX text)
   4. Negative pattern check (skip if safe pattern on same line)
   5. Suppress-if-nearby check (skip if safe pattern within ±3 lines)
-  6. Effective severity calculation (file-path reduction)
-  7. Internal-path severity reduction (admin/scripts/seed paths)
-  8. Confidence classification (critical/safe/verify-needed)
-  9. Informational candidate collection (deferred, best-line scoring)
+  6. Learned safe pattern suppression (codebase profile)
+  7. Effective severity calculation (file-path reduction)
+  8. Internal-path severity reduction (admin/scripts/seed paths)
+  9. Adaptive confidence classification (Bayesian-updated from learned priors)
+ 10. Informational candidate collection (deferred, best-line scoring)
        │
        ▼
 Filter: .caspianignore entries
@@ -83,21 +99,25 @@ ResultsStore → Results panel + SARIF/JSON/CSV export
 ### extension.ts (Main Controller)
 - Extension lifecycle (activate/deactivate)
 - Event registration with 1-second debounce
-- Command registration (24 commands)
+- Command registration (28 commands)
 - AI fix workflow (generate, diff preview, apply, verify)
+- Fix pattern memory check before AI API calls (offers cached fixes)
+- Learning event emission at every user action (fix, ignore, FP, verify, fix-failed)
 - `.caspianignore` loading and file watching
 - Informational filtering and internal-path severity reduction
 - Workspace scanning with batched progress
 - Git uncommitted file scanning
 - Dependency checking integration
+- Telemetry service and learning dashboard initialization
 
 ### analyzer.ts (Security Engine)
 - Line-by-line pattern matching against 133+ rules
 - Context-aware filtering (comments, strings, JSX text)
 - Negative pattern and suppress-if-nearby logic
+- Learned safe pattern suppression via codebase profile
 - File pattern include/exclude/reduceSeverityIn
 - Informational rule candidate scoring (picks best line)
-- Confidence classification delegation
+- Adaptive confidence classification (Bayesian-updated, falls back to static heuristics)
 - Project advisory collection
 
 ### rules/ (14 Category Files)
@@ -148,6 +168,7 @@ interface SecurityRule {
 - Classifies issues as `critical`, `safe`, or `verify-needed`
 - Analyzes whether matched values are hardcoded literals vs. env references
 - Applied to secret rules (CRED, AUTH001) and query rules (DB001, DB002)
+- Used as the static prior by AdaptiveConfidenceEngine
 
 ### contextExtractor.ts
 - Extracts enclosing function scope via VS Code DocumentSymbolProvider
@@ -209,6 +230,15 @@ interface SecurityRule {
 - **taskTreeProvider.ts** -- VS Code TreeDataProvider for sidebar tree view; groups by status (Overdue, Pending, Completed, Snoozed, Dismissed), sorted by priority
 - **taskCommands.ts** -- Registers 4 commands: taskAction, showTaskDashboard, refreshTasks, completeAllOverdue
 
+### Learning Intelligence System (ruleIntelligence.ts, adaptiveConfidence.ts, fixPatternMemory.ts, codebaseProfile.ts, scanInsights.ts, telemetryService.ts, learningPanel.ts)
+- **ruleIntelligence.ts** -- Per-rule effectiveness tracking: detections, FP rates, fix rates, AI fix success rates, resolution times, broken down by language and file pattern. Persists to `rule-intelligence.json` (2000ms debounce). Provides `getLikelyRealScore()` for ranking issues by real-world likelihood
+- **adaptiveConfidence.ts** -- Bayesian confidence engine that uses static `classifyConfidence()` as prior and adjusts based on learned data. Downgrades rules with >70% FP rate, upgrades rules with >80% fix rate. Applies file-path context (test files reduce confidence, source files with high fix rates boost confidence)
+- **fixPatternMemory.ts** -- Caches successful AI fixes as normalized patterns (variable names → `$VAR1`, strings → `$STRING`). Offers instant replay for similar issues without API calls. Max 500 patterns with LRU eviction. Persists to `fix-patterns.json` (3000ms debounce)
+- **codebaseProfile.ts** -- Project-specific intelligence: learns safe functions from AI fixes and FP dismissals (e.g., `DOMPurify.sanitize` neutralizes XSS rules), tracks hot zones by directory risk density, monitors security posture trend, detects regressions. Persists to `codebase-profile.json` (5000ms debounce)
+- **scanInsights.ts** -- On-demand insight generation: trend analysis, noisy rule detection, regression alerts, hot zone identification, fix pattern availability, AI fix effectiveness, category completion celebrations. Computed from all learning stores, not persisted
+- **telemetryService.ts** -- Opt-in anonymized rule stats sent daily to developer endpoint (no code, paths, or project names). User can preview exact payload. First-run prompt with "View What's Shared" option. Fire-and-forget HTTPS POST
+- **learningPanel.ts** -- Webview dashboard: overview stats, sortable rule effectiveness table, fix pattern library, hot zones, security trend visualization, active insights with action buttons, reset/export controls
+
 ## Configuration Schema
 
 ```json
@@ -224,7 +254,8 @@ interface SecurityRule {
   "caspianSecurity.aiModel": "",
   "caspianSecurity.enable<Category>": true,
   "caspianSecurity.enableTaskManagement": true,
-  "caspianSecurity.taskReminders": true
+  "caspianSecurity.taskReminders": true,
+  "caspianSecurity.enableTelemetry": false
 }
 ```
 
@@ -243,9 +274,9 @@ interface SecurityRule {
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `extension.ts` | ~1230 | Main entry, commands, scanning, AI fix workflow |
+| `extension.ts` | ~1460 | Main entry, commands, scanning, AI fix workflow, learning integration |
 | `resultsPanel.ts` | ~810 | Webview results panel |
-| `analyzer.ts` | ~360 | Rule engine with context-aware analysis |
+| `analyzer.ts` | ~405 | Rule engine with context-aware analysis + adaptive confidence |
 | `aiFixService.ts` | ~280 | AI provider abstraction |
 | `aiSettingsPanel.ts` | ~300 | AI configuration webview |
 | `resultsStore.ts` | ~180 | Results storage + SARIF export |
@@ -264,8 +295,15 @@ interface SecurityRule {
 | `taskManager.ts` | ~165 | Scheduler, auto-completion, quick pick UI |
 | `taskTreeProvider.ts` | ~170 | Sidebar tree view provider |
 | `taskCommands.ts` | ~55 | Task command registration |
+| `ruleIntelligence.ts` | ~280 | Per-rule effectiveness tracking |
+| `adaptiveConfidence.ts` | ~100 | Bayesian confidence with learned priors |
+| `fixPatternMemory.ts` | ~300 | Cached AI fix patterns for instant replay |
+| `codebaseProfile.ts` | ~345 | Project-specific learned patterns |
+| `scanInsights.ts` | ~230 | Actionable intelligence generation |
+| `telemetryService.ts` | ~240 | Opt-in anonymized rule stats |
+| `learningPanel.ts` | ~300 | Learning dashboard webview |
 | `rules/` (14 files) | ~1200 | 133+ security rule definitions |
-| **Total** | **~6150+** | |
+| **Total** | **~7950+** | |
 
 **Memory usage**: ~5-10 MB
 **Analysis time**: ~50-200ms per file

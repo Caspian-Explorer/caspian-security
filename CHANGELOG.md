@@ -4,6 +4,25 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [8.0.0] - 2026-02-22
+
+### Added
+
+- **Learning Intelligence System** — the extension now learns from every scan, fix, ignore, false positive, and verification to get smarter over time
+  - **Rule Intelligence Store** (`ruleIntelligence.ts`) — tracks per-rule effectiveness metrics: detection counts, false positive rates, fix rates, AI fix success rates, resolution times, broken down by language and file pattern
+  - **Adaptive Confidence Engine** (`adaptiveConfidence.ts`) — replaces static heuristics with Bayesian-updated confidence scoring that adjusts based on accumulated user behavior (rules with high FP rates get downgraded, highly-acted-on rules get upgraded)
+  - **Fix Pattern Memory** (`fixPatternMemory.ts`) — remembers successful AI fixes and offers instant replay for similar issues without an API call; normalizes code patterns for matching, tracks success rates, supports up to 500 patterns with LRU eviction
+  - **Codebase Profile** (`codebaseProfile.ts`) — builds a project-specific intelligence profile: learns safe functions from AI fixes and FP dismissals (e.g., DOMPurify.sanitize neutralizes XSS rules), tracks hot zones by directory risk density, monitors security posture trends, detects regressions when previously fixed issues reappear
+  - **Scan Insights Engine** (`scanInsights.ts`) — generates actionable insights: trend analysis (improving/degrading), noisy rule detection, regression alerts, hot zone identification, fix pattern availability, AI fix effectiveness, and category completion celebrations
+  - **Opt-in Telemetry Service** (`telemetryService.ts`) — anonymized rule effectiveness statistics sent to developer endpoint (off by default, no code/paths/project names, user can preview exact payload before enabling)
+  - **Learning Dashboard** (`learningPanel.ts`) — dedicated webview panel with overview stats, sortable rule effectiveness table, fix pattern library, codebase hot zones, security trend visualization, active insights with action buttons, and reset/export controls
+- **New commands**: `Show Learning Dashboard`, `Reset All Learning Data`, `Export Learning Data`, `Preview Telemetry Data`
+- **New setting**: `enableTelemetry` — opt-in anonymous rule statistics sharing (default: off)
+- Learned safe pattern suppression in the scan engine — automatically suppresses findings when learned sanitizer functions are nearby
+- Fix pattern memory check before AI API calls — offers instant cached fixes with success rate display
+
+---
+
 ## [7.3.0] - 2026-02-22
 
 ### Added

@@ -19,6 +19,13 @@ import { PersistenceManager } from './persistenceManager';
 import { FileStateTracker, FileChangeStatus } from './fileStateTracker';
 import { FalsePositiveStore } from './falsePositiveStore';
 import { ScanHistoryStore } from './scanHistoryStore';
+import { RuleIntelligenceStore } from './ruleIntelligence';
+import { AdaptiveConfidenceEngine } from './adaptiveConfidence';
+import { FixPatternMemory } from './fixPatternMemory';
+import { CodebaseProfile } from './codebaseProfile';
+import { generateInsights } from './scanInsights';
+import { TelemetryService } from './telemetryService';
+import { LearningPanel } from './learningPanel';
 import { TaskStore } from './taskStore';
 import { TaskManager } from './taskManager';
 import { TaskTreeProvider } from './taskTreeProvider';
@@ -107,6 +114,11 @@ let ignoreEntries: IgnoreEntry[] = [];
 let fileStateTracker: FileStateTracker;
 let falsePositiveStore: FalsePositiveStore;
 let scanHistoryStore: ScanHistoryStore;
+let ruleIntelligence: RuleIntelligenceStore;
+let fixPatternMemory: FixPatternMemory;
+let codebaseProfile: CodebaseProfile;
+let telemetryService: TelemetryService;
+let learningPanel: LearningPanel;
 let taskStore: TaskStore;
 let taskManager: TaskManager;
 let taskTreeProvider: TaskTreeProvider;
@@ -148,10 +160,16 @@ export function activate(context: vscode.ExtensionContext) {
     fileStateTracker = new FileStateTracker();
     falsePositiveStore = new FalsePositiveStore(fileStateTracker);
     scanHistoryStore = new ScanHistoryStore();
+    ruleIntelligence = new RuleIntelligenceStore();
+    fixPatternMemory = new FixPatternMemory();
+    codebaseProfile = new CodebaseProfile();
     context.subscriptions.push(PersistenceManager.getInstance());
     context.subscriptions.push(fileStateTracker);
     context.subscriptions.push(falsePositiveStore);
     context.subscriptions.push(scanHistoryStore);
+    context.subscriptions.push(ruleIntelligence);
+    context.subscriptions.push(fixPatternMemory);
+    context.subscriptions.push(codebaseProfile);
 
     // Connect scan history to status bar
     statusBarManager.setScanHistoryStore(scanHistoryStore);
@@ -161,7 +179,27 @@ export function activate(context: vscode.ExtensionContext) {
       fileStateTracker.load(),
       falsePositiveStore.load(),
       scanHistoryStore.load(),
+      ruleIntelligence.load(),
+      fixPatternMemory.load(),
+      codebaseProfile.load(),
     ]).then(async () => {
+      // Wire learning engines into the analyzer
+      const adaptiveConfidence = new AdaptiveConfidenceEngine(ruleIntelligence);
+      analyzer.setAdaptiveConfidence(adaptiveConfidence);
+      analyzer.setCodebaseProfile(codebaseProfile);
+
+      // Initialize telemetry and learning dashboard
+      const extensionVersion = vscode.extensions.getExtension('caspian.caspian-security')?.packageJSON?.version || 'unknown';
+      telemetryService = new TelemetryService(ruleIntelligence, fixPatternMemory, context.globalState, extensionVersion);
+      context.subscriptions.push(telemetryService);
+      telemetryService.start();
+
+      learningPanel = new LearningPanel(
+        context.extensionUri, ruleIntelligence, fixPatternMemory,
+        codebaseProfile, scanHistoryStore
+      );
+      context.subscriptions.push(learningPanel);
+
       const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (wsRoot && configManager.get<boolean>('enablePersistentCache', true)) {
         restoreCachedResults(wsRoot);
@@ -361,6 +399,12 @@ function registerCommands(context: vscode.ExtensionContext) {
       const key = FixTracker.makeKey(issueData.relativePath, issueData.code, issueData.line, issueData.pattern);
       fixTracker.markIgnored(key, issueData.filePath, issueData.relativePath, issueData.code, issueData.line, issueData.pattern);
 
+      // Record for rule intelligence learning
+      if (ruleIntelligence) {
+        const langId = path.extname(issueData.filePath).slice(1).toLowerCase();
+        ruleIntelligence.recordAction(issueData.code, 'ignored', langId, issueData.filePath);
+      }
+
       // Prompt for optional reason and write to .caspianignore
       const reason = await vscode.window.showInputBox({
         prompt: `Reason for ignoring ${issueData.code} (optional)`,
@@ -408,6 +452,13 @@ function registerCommands(context: vscode.ExtensionContext) {
           // Mark as verified
           fixTracker.markVerified(key, issueData.filePath, issueData.relativePath,
             issueData.code, issueData.line, issueData.pattern);
+
+          // Record for rule intelligence learning
+          if (ruleIntelligence) {
+            const langId = path.extname(issueData.filePath).slice(1).toLowerCase();
+            ruleIntelligence.recordAction(issueData.code, 'verified', langId, issueData.filePath);
+          }
+
           vscode.window.showInformationMessage(
             `Issue ${issueData.code} verified as resolved.`
           );
@@ -484,6 +535,10 @@ function registerCommands(context: vscode.ExtensionContext) {
                     record.issueLine,
                     record.issuePattern
                   );
+                  if (ruleIntelligence) {
+                    const langId = path.extname(record.filePath).slice(1).toLowerCase();
+                    ruleIntelligence.recordAction(record.issueCode, 'verified', langId, record.filePath);
+                  }
                   verifiedCount++;
                 }
               }
@@ -604,6 +659,24 @@ function registerCommands(context: vscode.ExtensionContext) {
         reason || undefined
       );
 
+      // Record for rule intelligence learning
+      if (ruleIntelligence) {
+        const langId = path.extname(issueData.filePath).slice(1).toLowerCase();
+        ruleIntelligence.recordAction(issueData.code, 'false_positive', langId, issueData.filePath);
+      }
+
+      // Learn safe patterns from false positive context
+      if (codebaseProfile) {
+        try {
+          const uri = vscode.Uri.file(issueData.filePath);
+          const doc = await vscode.workspace.openTextDocument(uri);
+          const lineText = doc.lineAt(issueData.line).text;
+          codebaseProfile.learnFromFalsePositive(issueData.code, lineText);
+        } catch {
+          // File may not be accessible
+        }
+      }
+
       vscode.window.showInformationMessage(
         `${issueData.code} marked as false positive. It won't appear again unless the file changes.`
       );
@@ -665,6 +738,64 @@ function registerCommands(context: vscode.ExtensionContext) {
       if (choice === 'Clear All') {
         falsePositiveStore.clearAll();
         vscode.window.showInformationMessage('Caspian Security: All false positive dismissals cleared');
+      }
+    })
+  );
+
+  // Learning Dashboard
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.showLearningDashboard', () => {
+      if (learningPanel) {
+        learningPanel.show();
+      } else {
+        vscode.window.showInformationMessage('Caspian Security: Learning system not yet initialized. Run a scan first.');
+      }
+    })
+  );
+
+  // Reset Learning Data
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.resetLearningData', async () => {
+      const choice = await vscode.window.showWarningMessage(
+        'Reset all Caspian learning data? This includes rule intelligence, fix patterns, and codebase profile. This cannot be undone.',
+        'Reset All',
+        'Cancel'
+      );
+      if (choice === 'Reset All') {
+        if (ruleIntelligence) { ruleIntelligence.clearAll(); }
+        if (fixPatternMemory) { fixPatternMemory.clearAll(); }
+        if (codebaseProfile) { codebaseProfile.clearAll(); }
+        vscode.window.showInformationMessage('Caspian Security: All learning data has been reset.');
+      }
+    })
+  );
+
+  // Export Learning Data
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.exportLearningData', async () => {
+      const data = {
+        ruleIntelligence: ruleIntelligence?.exportData(),
+        fixPatterns: fixPatternMemory?.exportData(),
+        codebaseProfile: codebaseProfile?.exportData(),
+      };
+      const uri = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.file('caspian-learning-data.json'),
+        filters: { 'JSON Files': ['json'] },
+      });
+      if (uri) {
+        fs.writeFileSync(uri.fsPath, JSON.stringify(data, null, 2), 'utf-8');
+        vscode.window.showInformationMessage(`Learning data exported to ${uri.fsPath}`);
+      }
+    })
+  );
+
+  // Telemetry preview
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.previewTelemetryData', async () => {
+      if (telemetryService) {
+        await telemetryService.showPreview();
+      } else {
+        vscode.window.showInformationMessage('Caspian Security: Telemetry service not yet initialized.');
       }
     })
   );
@@ -837,6 +968,17 @@ async function checkDocument(document: vscode.TextDocument, categories?: Securit
     // Record file state for persistent caching
     if (fileStateTracker) {
       fileStateTracker.recordScan(relativePath, document.uri.fsPath, document.languageId, issues);
+    }
+
+    // Record detections for rule intelligence learning
+    if (ruleIntelligence && issues.length > 0) {
+      ruleIntelligence.recordDetectionBatch(
+        issues.map(issue => ({
+          ruleCode: issue.code,
+          languageId: document.languageId,
+          filePath: document.uri.fsPath,
+        }))
+      );
     }
 
     if (issues.length > 0) {
@@ -1080,6 +1222,11 @@ async function runWorkspaceCheck() {
     });
   }
 
+  // Record scan completion for rule intelligence
+  if (ruleIntelligence) {
+    ruleIntelligence.recordScanCompleted();
+  }
+
   // Save file state cache
   if (fileStateTracker) {
     fileStateTracker.save();
@@ -1225,6 +1372,11 @@ async function runUncommittedCheck() {
       bySeverity: summary.bySeverity,
       byCategory: summary.byCategory,
     });
+  }
+
+  // Record scan completion for rule intelligence
+  if (ruleIntelligence) {
+    ruleIntelligence.recordScanCompleted();
   }
 
   // Save file state cache
@@ -1448,6 +1600,59 @@ async function executeAIFixFromPanel(
   const fullContent = document.getText();
   const lines = fullContent.split('\n');
   const originalLine = lines[issueData.line] || '';
+
+  // Check fix pattern memory for a cached fix before calling AI
+  if (fixPatternMemory) {
+    const cached = fixPatternMemory.findMatchingPattern(issueData.code, document.languageId, originalLine);
+    if (cached && cached.successRate > 0) {
+      const pct = Math.round(cached.successRate * 100);
+      const choice = await vscode.window.showInformationMessage(
+        `Caspian has a learned fix for this ${issueData.code} pattern (${pct}% success rate). Apply it?`,
+        'Apply Learned Fix', 'Generate New AI Fix', 'Cancel'
+      );
+      if (choice === 'Apply Learned Fix') {
+        const newLines = [...lines];
+        newLines[issueData.line] = cached.suggestedFix;
+        const fixedContent = newLines.join('\n');
+        const applied = await showDiffAndApply(document, fullContent, {
+          fixedFileContent: fixedContent,
+          explanation: `Learned fix (from pattern memory): ${cached.pattern.explanation}`,
+          confidence: 'high',
+        });
+        if (applied) {
+          const key = FixTracker.makeKey(issueData.relativePath, issueData.code, issueData.line, issueData.pattern);
+          fixTracker.markFixed(key, issueData.filePath, issueData.relativePath,
+            issueData.code, issueData.line, issueData.pattern,
+            cached.pattern.explanation, 'pattern-memory');
+          if (ruleIntelligence) {
+            ruleIntelligence.recordAction(issueData.code, 'fixed', document.languageId, issueData.filePath);
+          }
+          // Re-scan to verify the learned fix
+          const updatedDoc = await vscode.workspace.openTextDocument(uri);
+          await checkDocument(updatedDoc);
+          const updatedResults = resultsStore.getFileResults(uri.toString());
+          const stillPresent = updatedResults?.issues.some(
+            i => i.code === issueData.code && i.line === issueData.line
+          );
+          fixPatternMemory.recordOutcome(cached.pattern.id, !stillPresent);
+          if (stillPresent) {
+            fixTracker.markFixFailed(key);
+            if (ruleIntelligence) {
+              ruleIntelligence.recordAction(issueData.code, 'fix_failed', document.languageId, issueData.filePath);
+            }
+            vscode.window.showWarningMessage('Learned fix applied but issue still detected. Try generating a new AI fix.');
+          } else {
+            vscode.window.showInformationMessage(`Issue ${issueData.code} fixed using learned pattern.`);
+          }
+        }
+        return;
+      } else if (choice === 'Cancel') {
+        return;
+      }
+      // 'Generate New AI Fix' falls through to normal flow
+    }
+  }
+
   const startLine = Math.max(0, issueData.line - 10);
   const endLine = Math.min(lines.length, issueData.line + 11);
   const surroundingCode = lines.slice(startLine, endLine).join('\n');
@@ -1498,6 +1703,11 @@ async function executeAIFixFromPanel(
             response.explanation, providerConfig.provider
           );
 
+          // Record for rule intelligence learning
+          if (ruleIntelligence) {
+            ruleIntelligence.recordAction(issueData.code, 'fixed', document.languageId, issueData.filePath);
+          }
+
           // Re-scan to verify
           const updatedDoc = await vscode.workspace.openTextDocument(uri);
           await checkDocument(updatedDoc);
@@ -1509,10 +1719,28 @@ async function executeAIFixFromPanel(
             );
             if (stillPresent) {
               fixTracker.markFixFailed(key);
+              if (ruleIntelligence) {
+                ruleIntelligence.recordAction(issueData.code, 'fix_failed', document.languageId, issueData.filePath);
+              }
               vscode.window.showWarningMessage(
                 `AI fix applied but issue ${issueData.code} still detected. The fix may be insufficient.`
               );
             } else {
+              // Record successful fix pattern for future reuse
+              if (fixPatternMemory || codebaseProfile) {
+                const updatedDoc2 = await vscode.workspace.openTextDocument(uri);
+                const updatedLines = updatedDoc2.getText().split('\n');
+                const afterLine = updatedLines[issueData.line] || '';
+                if (fixPatternMemory) {
+                  fixPatternMemory.recordFix(
+                    issueData.code, document.languageId,
+                    originalLine, afterLine, response.explanation
+                  );
+                }
+                if (codebaseProfile) {
+                  codebaseProfile.learnFromAIFix(issueData.code, afterLine);
+                }
+              }
               vscode.window.showInformationMessage(`Issue ${issueData.code} fixed and verified.`);
             }
           }

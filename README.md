@@ -27,6 +27,7 @@ What sets it apart: **context-aware intelligence**. The scanner classifies detec
 - **Cancellable scans** -- workspace scans show progress and can be cancelled mid-run
 - **Configurable severity** -- filter diagnostics by error, warning, or info thresholds
 - **False positive controls** -- context-aware rules, generated file detection, masking function detection, internal-path severity reduction, pagination-aware rules, and a toggle to hide informational reminders
+- **Learning Intelligence** -- the extension learns from every scan, fix, ignore, and false positive to improve accuracy over time: adaptive confidence scoring, fix pattern memory for instant replays, codebase-specific safe pattern learning, regression detection, and actionable insights
 - **Security Task Management** -- 23 recurring security tasks across all 14 categories with configurable intervals, overdue reminders, auto-completion on scans, and per-project persistence
 
 ---
@@ -122,6 +123,10 @@ Open the Command Palette (`Ctrl+Shift+P`) and search for any of the following:
 | Caspian Security: Check Logging & Monitoring         | Scan for LOG rules only                      |
 | Caspian Security: Check Dependencies & Supply Chain  | Scan for DEP rules only                      |
 | Caspian Security: Check Infrastructure & Deployment  | Scan for INFRA rules only                    |
+| Caspian Security: Show Learning Dashboard            | Open the learning intelligence dashboard     |
+| Caspian Security: Reset All Learning Data            | Clear all learned data (with confirmation)   |
+| Caspian Security: Export Learning Data               | Export learning data as JSON                 |
+| Caspian Security: Preview Telemetry Data             | View exact telemetry payload before enabling |
 
 ### Scan Modes
 
@@ -171,6 +176,34 @@ Confidence badges appear:
 - In **VS Code diagnostics** as a prefix (e.g., `[Critical] [Secrets] CRED001: ...`)
 
 Confidence is only shown when the heuristic is confident in its classification. Issues without a clear signal show no badge.
+
+---
+
+## Learning Intelligence
+
+Caspian Security learns from every scan, fix, ignore, and false positive to improve accuracy over time. All learning is per-workspace and persists across VS Code restarts.
+
+### What it learns
+
+- **Rule effectiveness** -- tracks detection counts, false positive rates, fix rates, and AI fix success rates per rule, broken down by language and file pattern
+- **Adaptive confidence** -- shifts confidence levels based on accumulated behavior (rules with high FP rates get downgraded, highly-acted-on rules get upgraded)
+- **Fix patterns** -- remembers successful AI fixes and offers instant replay for similar issues without an API call
+- **Safe patterns** -- learns which sanitizer/validator functions neutralize which rules (from AI fixes and FP dismissals)
+- **Hot zones** -- identifies directories with the highest confirmed issue density
+- **Regressions** -- detects when previously fixed issues reappear
+
+### Learning Dashboard
+
+Run **"Caspian Security: Show Learning Dashboard"** to see:
+- Overview stats (total observations, scans, learning events)
+- Sortable rule effectiveness table with FP rates and fix rates
+- Fix pattern library with success rates
+- Codebase hot zones ranked by risk
+- Active insights with action buttons
+
+### Opt-in Telemetry
+
+Help improve Caspian Security by sharing anonymized rule effectiveness statistics. **Off by default.** No code, file paths, or project names are ever sent -- only rule codes and numeric counts. Run **"Preview Telemetry Data"** to see the exact payload before enabling. Enable via `caspianSecurity.enableTelemetry` in settings.
 
 ---
 
@@ -226,6 +259,7 @@ Open VS Code Settings (`Ctrl+,`) and search for **"Caspian Security"** to config
 | `caspianSecurity.includeDependencyCheck` | boolean | `true` | Include dependency update and vulnerability checks during workspace scans |
 | `caspianSecurity.showInformational`      | boolean  | `true`    | Show informational reminders alongside security findings. Disable to see only actionable issues |
 | `caspianSecurity.reduceInternalPathSeverity` | boolean | `true` | Reduce severity for files in admin, scripts, internal, seed, and migration directories |
+| `caspianSecurity.enableTelemetry`            | boolean  | `false`   | Share anonymized rule effectiveness statistics (no code or file data) |
 
 ### AI Settings
 

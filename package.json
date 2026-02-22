@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/Caspian-Explorer/caspian-security"
   },
-  "version": "7.3.0",
+  "version": "8.0.0",
   "publisher": "CaspianTools",
   "license": "MIT",
   "engines": {
@@ -181,6 +181,22 @@
       {
         "command": "caspian-security.clearFalsePositives",
         "title": "Caspian Security: Clear All False Positive Dismissals"
+      },
+      {
+        "command": "caspian-security.showLearningDashboard",
+        "title": "Caspian Security: Show Learning Dashboard"
+      },
+      {
+        "command": "caspian-security.resetLearningData",
+        "title": "Caspian Security: Reset All Learning Data"
+      },
+      {
+        "command": "caspian-security.exportLearningData",
+        "title": "Caspian Security: Export Learning Data"
+      },
+      {
+        "command": "caspian-security.previewTelemetryData",
+        "title": "Caspian Security: Preview Telemetry Data"
       },
       {
         "command": "caspian-security.showTaskDashboard",
@@ -432,6 +448,11 @@
           "type": "boolean",
           "default": true,
           "description": "Skip re-scanning files that haven't changed since last scan during workspace scans"
+        },
+        "caspianSecurity.enableTelemetry": {
+          "type": "boolean",
+          "default": false,
+          "description": "Help improve Caspian Security by sharing anonymized rule effectiveness statistics. No code, file paths, or project data is ever sent."
         },
         "caspianSecurity.enableTaskManagement": {
           "type": "boolean",
