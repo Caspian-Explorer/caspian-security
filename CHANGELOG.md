@@ -4,6 +4,15 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [8.0.1] - 2026-02-22
+
+### Changed
+
+- Pre-commit standing instructions now require GitHub Wiki updates (clone, edit, push) instead of just flagging changes
+- Pre-commit standing instructions now require posting a social-media-ready GitHub Discussion after every commit
+
+---
+
 ## [8.0.0] - 2026-02-22
 
 ### Added

@@ -43,7 +43,12 @@ Update **all** documentation affected by the changes:
    - `QUICKSTART.md` — quickstart guide
    - `START_HERE.md` — documentation index
 3. **package.json** `description` field — update if the extension's capabilities changed.
-4. If a change affects features that may be documented in **GitHub wiki pages**, flag it to the user before committing.
+4. **GitHub Wiki** — if the changes affect features documented in the wiki, update the relevant wiki pages:
+   - Clone the wiki repo: `git clone https://github.com/Caspian-Explorer/caspian-security.wiki.git /tmp/caspian-wiki`
+   - Edit the affected pages (Home.md, Getting-Started.md, Configuration.md, AI-Fixes.md, Confidence-Scoring.md, Caspianignore.md, SARIF-Export.md, Rule-Reference.md, FAQ.md, _Sidebar.md)
+   - If a new feature warrants its own wiki page, create it and add a link in `_Sidebar.md` and `Home.md`
+   - Commit and push: `cd /tmp/caspian-wiki && git add -A && git commit -m "<description>" && git push`
+   - If no wiki pages are affected, skip this step.
 
 ### 6. Verify Packaging
 ```
@@ -53,3 +58,40 @@ Confirm the extension packages into a `.vsix` without errors. Keep the `.vsix` f
 
 ### 7. Commit
 Create the commit with a descriptive message in imperative mood, matching the project's established style (e.g., "Add persistent scan memory" not "Added persistent scan memory").
+
+### 8. Post to GitHub Discussions
+After every commit, create a GitHub Discussion in the **Announcements** category. The post must be **social-media-ready** — the user should be able to copy-paste it directly to Twitter/X, LinkedIn, etc.
+
+**Format requirements:**
+- **Title:** action-oriented, attention-grabbing, under 100 characters (e.g., "Caspian Security now learns from your fixes")
+- **Body:** 2-4 bullet points of what's new, a one-liner value prop, and a link to the repo. Use emojis sparingly for visual appeal.
+- Keep it short and punchy — 1-3 sentences for the intro, then bullets.
+
+**Create via GraphQL API:**
+```bash
+gh api graphql -f query='
+  mutation {
+    createDiscussion(input: {
+      repositoryId: "R_kgDORDMT5Q",
+      categoryId: "DIC_kwDORDMT5c4C1lYC",
+      title: "<TITLE>",
+      body: "<BODY>"
+    }) {
+      discussion { url }
+    }
+  }
+'
+```
+
+**Example post:**
+> **Title:** Caspian Security 8.0 — Your scanner now learns from every fix
+>
+> **Body:**
+> Caspian Security 8.0 is here — the extension now gets smarter with every scan.
+>
+> - Learns which rules produce real issues vs false positives
+> - Remembers successful AI fixes and replays them instantly
+> - New Learning Dashboard with rule effectiveness, hot zones & trends
+> - Opt-in telemetry — preview exactly what's shared before enabling
+>
+> https://github.com/Caspian-Explorer/caspian-security
