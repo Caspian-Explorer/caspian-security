@@ -64,7 +64,8 @@ After every commit, create a GitHub Discussion in the **Announcements** category
 
 **Format requirements:**
 - **Title:** action-oriented, attention-grabbing, under 100 characters (e.g., "Caspian Security now learns from your fixes")
-- **Body:** 2-4 bullet points of what's new, a one-liner value prop, and a link to the repo. Use emojis sparingly for visual appeal.
+- **Body:** 2-4 bullet points of what's new, a one-liner value prop, and the VS Code Marketplace link. Use emojis sparingly for visual appeal.
+- **Always include the Marketplace link:** https://marketplace.visualstudio.com/items?itemName=CaspianTools.caspian-security
 - Keep it short and punchy — 1-3 sentences for the intro, then bullets.
 
 **Create via GraphQL API:**
@@ -94,4 +95,4 @@ gh api graphql -f query='
 > - New Learning Dashboard with rule effectiveness, hot zones & trends
 > - Opt-in telemetry — preview exactly what's shared before enabling
 >
-> https://github.com/Caspian-Explorer/caspian-security
+> https://marketplace.visualstudio.com/items?itemName=CaspianTools.caspian-security

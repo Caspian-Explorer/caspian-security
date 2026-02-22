@@ -4,6 +4,14 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [8.0.2] - 2026-02-22
+
+### Changed
+
+- GitHub Discussion posts now link to the VS Code Marketplace instead of the GitHub repo
+
+---
+
 ## [8.0.1] - 2026-02-22
 
 ### Changed
