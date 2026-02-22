@@ -27,6 +27,7 @@ What sets it apart: **context-aware intelligence**. The scanner classifies detec
 - **Cancellable scans** -- workspace scans show progress and can be cancelled mid-run
 - **Configurable severity** -- filter diagnostics by error, warning, or info thresholds
 - **False positive controls** -- context-aware rules, generated file detection, masking function detection, internal-path severity reduction, pagination-aware rules, and a toggle to hide informational reminders
+- **Security Task Management** -- 23 recurring security tasks across all 14 categories with configurable intervals, overdue reminders, auto-completion on scans, and per-project persistence
 
 ---
 

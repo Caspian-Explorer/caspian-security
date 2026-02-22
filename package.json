@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/Caspian-Explorer/caspian-security"
   },
-  "version": "7.2.1",
+  "version": "7.3.0",
   "publisher": "CaspianTools",
   "license": "MIT",
   "engines": {
@@ -181,9 +181,55 @@
       {
         "command": "caspian-security.clearFalsePositives",
         "title": "Caspian Security: Clear All False Positive Dismissals"
+      },
+      {
+        "command": "caspian-security.showTaskDashboard",
+        "title": "Caspian Security: Show Security Tasks"
+      },
+      {
+        "command": "caspian-security.refreshTasks",
+        "title": "Caspian Security: Refresh Security Tasks",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "caspian-security.taskAction",
+        "title": "Caspian Security: Task Action"
+      },
+      {
+        "command": "caspian-security.completeAllOverdue",
+        "title": "Caspian Security: Complete All Overdue Tasks"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "caspian-security",
+          "title": "Caspian Security",
+          "icon": "icon.png"
+        }
+      ]
+    },
+    "views": {
+      "caspian-security": [
+        {
+          "id": "caspianSecurityTasks",
+          "name": "Security Tasks",
+          "when": "caspianSecurity.taskManagementEnabled"
+        }
+      ]
+    },
     "menus": {
+      "view/title": [
+        {
+          "command": "caspian-security.refreshTasks",
+          "when": "view == caspianSecurityTasks",
+          "group": "navigation"
+        },
+        {
+          "command": "caspian-security.completeAllOverdue",
+          "when": "view == caspianSecurityTasks"
+        }
+      ],
       "scm/title": [
         {
           "command": "caspian-security.runCheckUncommitted",
@@ -222,6 +268,10 @@
         },
         {
           "command": "caspian-security.markFalsePositive",
+          "when": "false"
+        },
+        {
+          "command": "caspian-security.taskAction",
           "when": "false"
         }
       ]
@@ -382,6 +432,16 @@
           "type": "boolean",
           "default": true,
           "description": "Skip re-scanning files that haven't changed since last scan during workspace scans"
+        },
+        "caspianSecurity.enableTaskManagement": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the Security Task Management system with recurring task tracking and reminders"
+        },
+        "caspianSecurity.taskReminders": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show notification reminders when security tasks become overdue"
         }
       }
     }

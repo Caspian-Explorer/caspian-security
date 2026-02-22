@@ -19,6 +19,10 @@ import { PersistenceManager } from './persistenceManager';
 import { FileStateTracker, FileChangeStatus } from './fileStateTracker';
 import { FalsePositiveStore } from './falsePositiveStore';
 import { ScanHistoryStore } from './scanHistoryStore';
+import { TaskStore } from './taskStore';
+import { TaskManager } from './taskManager';
+import { TaskTreeProvider } from './taskTreeProvider';
+import { registerTaskCommands } from './taskCommands';
 
 const BATCH_SIZE = 50;
 
@@ -103,6 +107,9 @@ let ignoreEntries: IgnoreEntry[] = [];
 let fileStateTracker: FileStateTracker;
 let falsePositiveStore: FalsePositiveStore;
 let scanHistoryStore: ScanHistoryStore;
+let taskStore: TaskStore;
+let taskManager: TaskManager;
+let taskTreeProvider: TaskTreeProvider;
 
 export function activate(context: vscode.ExtensionContext) {
   try {
@@ -154,11 +161,36 @@ export function activate(context: vscode.ExtensionContext) {
       fileStateTracker.load(),
       falsePositiveStore.load(),
       scanHistoryStore.load(),
-    ]).then(() => {
+    ]).then(async () => {
       const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (wsRoot && configManager.get<boolean>('enablePersistentCache', true)) {
         restoreCachedResults(wsRoot);
       }
+
+      // Initialize Security Task Management
+      taskStore = new TaskStore();
+      await taskStore.load();
+      taskStore.initializeFromCatalog();
+
+      taskManager = new TaskManager(taskStore, configManager);
+      taskTreeProvider = new TaskTreeProvider(taskStore);
+
+      context.subscriptions.push(taskStore);
+      context.subscriptions.push(taskManager);
+      context.subscriptions.push(taskTreeProvider);
+
+      const treeView = vscode.window.createTreeView('caspianSecurityTasks', {
+        treeDataProvider: taskTreeProvider,
+        showCollapseAll: true,
+      });
+      context.subscriptions.push(treeView);
+
+      registerTaskCommands(context, taskManager, taskStore, taskTreeProvider);
+
+      vscode.commands.executeCommand('setContext', 'caspianSecurity.taskManagementEnabled',
+        configManager.get<boolean>('enableTaskManagement', true));
+
+      taskManager.startScheduler();
     }).catch(error => {
       console.error('Caspian Security: Failed to load persistence stores:', error);
     });
@@ -1053,6 +1085,11 @@ async function runWorkspaceCheck() {
     fileStateTracker.save();
   }
 
+  // Auto-complete related security tasks
+  if (taskManager) {
+    taskManager.onWorkspaceScanCompleted();
+  }
+
   const skippedNote = totalFilesSkipped > 0 ? ` (${totalFilesSkipped} cached)` : '';
   const advisoryNote = allAdvisories.length > 0 ? ` + ${allAdvisories.length} advisory(ies)` : '';
   vscode.window.showInformationMessage(
@@ -1195,6 +1232,11 @@ async function runUncommittedCheck() {
     fileStateTracker.save();
   }
 
+  // Auto-complete related security tasks
+  if (taskManager) {
+    taskManager.onWorkspaceScanCompleted();
+  }
+
   vscode.window.showInformationMessage(
     `Caspian Security: Scan complete — ${issueCount} issue(s) found in ${supportedFiles.length} uncommitted files`
   );
@@ -1247,6 +1289,11 @@ async function runDependencyCheck(): Promise<DependencyCheckResult | undefined> 
     );
 
     storeDependencyResultsAsIssues(result, workspaceRoot);
+
+    // Auto-complete related security tasks
+    if (taskManager) {
+      taskManager.onDependencyCheckCompleted();
+    }
   }
 
   return result;

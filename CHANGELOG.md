@@ -4,6 +4,28 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [7.3.0] - 2026-02-22
+
+### Added
+
+- **Security Task Management system** — recurring security task tracking with per-project persistence, interval-based reminders, and auto-completion
+  - 23 predefined security tasks across all 14 categories (dependencies, secrets, encryption, logging, infrastructure, auth, CORS, input validation, CSRF, API, database, file handling, frontend, business logic)
+  - Configurable intervals: daily, weekly, biweekly, monthly, quarterly
+  - Auto-completes tasks when relevant extension actions run (workspace scans, dependency checks)
+  - 15-minute scheduler checks for overdue tasks and shows notification reminders
+  - Snooze options (1 hour, 4 hours, 1 day, 3 days, 1 week) and dismiss/reinstate per task
+  - Per-task interval override without affecting other tasks
+- **Activity bar sidebar** — dedicated Caspian Security icon in the VS Code activity bar with Security Tasks tree view
+  - Tasks grouped by status: Overdue, Pending, Completed, Snoozed, Dismissed
+  - Sorted by priority within each group
+  - Click any task to open quick pick with Complete/Snooze/Change Interval/Dismiss actions
+  - Refresh button and "Complete All Overdue" action in title bar
+- **New commands**: `Show Security Tasks`, `Refresh Security Tasks`, `Complete All Overdue Tasks`
+- **New settings**: `enableTaskManagement` (master toggle), `taskReminders` (notification popups)
+- **Task persistence** — task state stored in `security-tasks.json` via PersistenceManager, survives VS Code restarts
+
+---
+
 ## [7.2.1] - 2026-02-21
 
 ### Added

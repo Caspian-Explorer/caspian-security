@@ -201,6 +201,14 @@ interface SecurityRule {
 - Checks Node.js, TypeScript, and VS Code engine versions
 - Standalone CLI mode via `src/cli/checkUpdates.ts`
 
+### Task Management (taskTypes.ts, taskCatalog.ts, taskStore.ts, taskManager.ts, taskTreeProvider.ts, taskCommands.ts)
+- **taskTypes.ts** -- Enums (TaskInterval, TaskStatus, AutoCompleteTrigger) and interfaces (SecurityTaskDefinition, TaskInstance)
+- **taskCatalog.ts** -- 23 predefined recurring security tasks across all 14 categories with configurable intervals and auto-completion triggers
+- **taskStore.ts** -- Per-project persistence via PersistenceManager to `security-tasks.json`; manages task state (complete, snooze, dismiss, interval override)
+- **taskManager.ts** -- 15-minute scheduler for overdue detection and notifications; auto-completes tasks on workspace scan and dependency check events
+- **taskTreeProvider.ts** -- VS Code TreeDataProvider for sidebar tree view; groups by status (Overdue, Pending, Completed, Snoozed, Dismissed), sorted by priority
+- **taskCommands.ts** -- Registers 4 commands: taskAction, showTaskDashboard, refreshTasks, completeAllOverdue
+
 ## Configuration Schema
 
 ```json
@@ -214,7 +222,9 @@ interface SecurityRule {
   "caspianSecurity.reduceInternalPathSeverity": true,
   "caspianSecurity.aiProvider": "anthropic",
   "caspianSecurity.aiModel": "",
-  "caspianSecurity.enable<Category>": true
+  "caspianSecurity.enable<Category>": true,
+  "caspianSecurity.enableTaskManagement": true,
+  "caspianSecurity.taskReminders": true
 }
 ```
 
@@ -248,8 +258,14 @@ interface SecurityRule {
 | `diagnosticsManager.ts` | ~60 | VS Code diagnostics |
 | `gitIntegration.ts` | ~50 | Git SCM integration |
 | `dependencyChecker.ts` | ~200 | Dependency + stack checking |
+| `taskTypes.ts` | ~75 | Task data models and enums |
+| `taskCatalog.ts` | ~210 | 23 predefined security task definitions |
+| `taskStore.ts` | ~180 | Task persistence via PersistenceManager |
+| `taskManager.ts` | ~165 | Scheduler, auto-completion, quick pick UI |
+| `taskTreeProvider.ts` | ~170 | Sidebar tree view provider |
+| `taskCommands.ts` | ~55 | Task command registration |
 | `rules/` (14 files) | ~1200 | 133+ security rule definitions |
-| **Total** | **~5300+** | |
+| **Total** | **~6150+** | |
 
 **Memory usage**: ~5-10 MB
 **Analysis time**: ~50-200ms per file
