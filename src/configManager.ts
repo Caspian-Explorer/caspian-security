@@ -27,6 +27,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string[]> = {
   php: ['php'],
   go: ['go'],
   rust: ['rs'],
+  kotlin: ['kt', 'kts'],
 };
 
 export class ConfigManager {

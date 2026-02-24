@@ -13,20 +13,28 @@ import { businessLogicRules } from './businessLogicRules';
 import { loggingRules } from './loggingRules';
 import { dependenciesRules } from './dependenciesRules';
 import { infrastructureRules } from './infrastructureRules';
+import {
+  kotlinAuthRules,
+  kotlinXssRules,
+  kotlinEncryptionRules,
+  kotlinFileRules,
+  kotlinDatabaseRules,
+  kotlinLoggingRules,
+} from './kotlinAndroidRules';
 
 const allRulesByCategory: Record<SecurityCategory, SecurityRule[]> = {
-  [SecurityCategory.AuthAccessControl]: authRules,
-  [SecurityCategory.InputValidationXSS]: inputValidationRules,
+  [SecurityCategory.AuthAccessControl]: [...authRules, ...kotlinAuthRules],
+  [SecurityCategory.InputValidationXSS]: [...inputValidationRules, ...kotlinXssRules],
   [SecurityCategory.CSRFProtection]: csrfRules,
   [SecurityCategory.CORSConfiguration]: corsRules,
-  [SecurityCategory.EncryptionDataProtection]: encryptionRules,
+  [SecurityCategory.EncryptionDataProtection]: [...encryptionRules, ...kotlinEncryptionRules],
   [SecurityCategory.APISecurity]: apiSecurityRules,
-  [SecurityCategory.DatabaseSecurity]: databaseRules,
-  [SecurityCategory.FileHandling]: fileHandlingRules,
+  [SecurityCategory.DatabaseSecurity]: [...databaseRules, ...kotlinDatabaseRules],
+  [SecurityCategory.FileHandling]: [...fileHandlingRules, ...kotlinFileRules],
   [SecurityCategory.SecretsCredentials]: secretsRules,
   [SecurityCategory.FrontendSecurity]: frontendRules,
   [SecurityCategory.BusinessLogicPayment]: businessLogicRules,
-  [SecurityCategory.LoggingMonitoring]: loggingRules,
+  [SecurityCategory.LoggingMonitoring]: [...loggingRules, ...kotlinLoggingRules],
   [SecurityCategory.DependenciesSupplyChain]: dependenciesRules,
   [SecurityCategory.InfrastructureDeployment]: infrastructureRules,
 };

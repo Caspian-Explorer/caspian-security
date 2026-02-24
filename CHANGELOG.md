@@ -4,6 +4,25 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [8.0.3] - 2026-02-24
+
+### Added
+
+- **Kotlin/Android support** — `.kt` and `.kts` files are now scanned. All existing rules (secrets, weak crypto, HTTP URLs, SQL injection, etc.) apply automatically.
+- **10 Android/Jetpack-specific security rules** scoped to Kotlin files:
+  - `KT-AUTH001` — WebView JavaScript enabled (`setJavaScriptEnabled(true)`)
+  - `KT-AUTH002` — WebView JavaScript interface exposed (`addJavascriptInterface`)
+  - `KT-AUTH003` — Broadcast sent without receiver permission
+  - `KT-XSS001` — WebView file access enabled (`setAllowFileAccess(true)`)
+  - `KT-ENC001` — Insecure random number generator (`java.util.Random` instead of `SecureRandom`)
+  - `KT-ENC002` — Unencrypted SharedPreferences (should use `EncryptedSharedPreferences`)
+  - `KT-FILE001` — World-readable/writable file mode (`MODE_WORLD_READABLE`, `MODE_WORLD_WRITEABLE`)
+  - `KT-FILE002` — Unsafe external storage access (`getExternalStorageDirectory`)
+  - `KT-DB001` — Room `@RawQuery` annotation (potential SQL injection)
+  - `KT-LOG001` — Android log statements that may leak sensitive data in production
+
+---
+
 ## [8.0.2] - 2026-02-22
 
 ### Changed
