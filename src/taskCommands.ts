@@ -2,16 +2,24 @@ import * as vscode from 'vscode';
 import { TaskManager } from './taskManager';
 import { TaskStore } from './taskStore';
 import { TaskTreeProvider } from './taskTreeProvider';
+import { TaskDetailPanel } from './taskDetailPanel';
 
 export function registerTaskCommands(
   context: vscode.ExtensionContext,
   taskManager: TaskManager,
   taskStore: TaskStore,
   treeProvider: TaskTreeProvider,
+  taskDetailPanel: TaskDetailPanel,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('caspian-security.taskAction', (taskId: string) => {
-      taskManager.showTaskActions(taskId);
+      taskDetailPanel.show(taskId);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('caspian-security.showTaskDetail', (taskId: string) => {
+      taskDetailPanel.show(taskId);
     })
   );
 

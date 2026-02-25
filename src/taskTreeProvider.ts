@@ -40,8 +40,8 @@ class TaskTreeItem extends vscode.TreeItem {
     this.tooltip = this.buildTooltip(instance);
     this.contextValue = `task-${instance.status}`;
     this.command = {
-      command: 'caspian-security.taskAction',
-      title: 'Task Action',
+      command: 'caspian-security.showTaskDetail',
+      title: 'Show Task Details',
       arguments: [taskId],
     };
 

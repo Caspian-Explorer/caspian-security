@@ -28,7 +28,7 @@ What sets it apart: **context-aware intelligence**. The scanner classifies detec
 - **Configurable severity** -- filter diagnostics by error, warning, or info thresholds
 - **False positive controls** -- context-aware rules, generated file detection, masking function detection, internal-path severity reduction, pagination-aware rules, and a toggle to hide informational reminders
 - **Learning Intelligence** -- the extension learns from every scan, fix, ignore, and false positive to improve accuracy over time: adaptive confidence scoring, fix pattern memory for instant replays, codebase-specific safe pattern learning, regression detection, and actionable insights
-- **Security Task Management** -- 23 recurring security tasks across all 14 categories with configurable intervals, overdue reminders, auto-completion on scans, and per-project persistence
+- **Security Task Management** -- 23 recurring security tasks across all 14 categories with configurable intervals, overdue reminders, auto-completion on scans, per-project persistence, and a dedicated detail panel for viewing and managing tasks
 
 ---
 

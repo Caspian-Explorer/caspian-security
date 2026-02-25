@@ -30,6 +30,7 @@ import { TaskStore } from './taskStore';
 import { TaskManager } from './taskManager';
 import { TaskTreeProvider } from './taskTreeProvider';
 import { registerTaskCommands } from './taskCommands';
+import { TaskDetailPanel } from './taskDetailPanel';
 
 const BATCH_SIZE = 50;
 
@@ -213,9 +214,12 @@ export function activate(context: vscode.ExtensionContext) {
       taskManager = new TaskManager(taskStore, configManager);
       taskTreeProvider = new TaskTreeProvider(taskStore);
 
+      const taskDetailPanel = new TaskDetailPanel(context.extensionUri, taskStore);
+
       context.subscriptions.push(taskStore);
       context.subscriptions.push(taskManager);
       context.subscriptions.push(taskTreeProvider);
+      context.subscriptions.push(taskDetailPanel);
 
       const treeView = vscode.window.createTreeView('caspianSecurityTasks', {
         treeDataProvider: taskTreeProvider,
@@ -223,7 +227,7 @@ export function activate(context: vscode.ExtensionContext) {
       });
       context.subscriptions.push(treeView);
 
-      registerTaskCommands(context, taskManager, taskStore, taskTreeProvider);
+      registerTaskCommands(context, taskManager, taskStore, taskTreeProvider, taskDetailPanel);
 
       vscode.commands.executeCommand('setContext', 'caspianSecurity.taskManagementEnabled',
         configManager.get<boolean>('enableTaskManagement', true));

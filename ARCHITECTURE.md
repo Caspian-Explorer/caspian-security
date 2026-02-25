@@ -222,13 +222,14 @@ interface SecurityRule {
 - Checks Node.js, TypeScript, and VS Code engine versions
 - Standalone CLI mode via `src/cli/checkUpdates.ts`
 
-### Task Management (taskTypes.ts, taskCatalog.ts, taskStore.ts, taskManager.ts, taskTreeProvider.ts, taskCommands.ts)
+### Task Management (taskTypes.ts, taskCatalog.ts, taskStore.ts, taskManager.ts, taskTreeProvider.ts, taskCommands.ts, taskDetailPanel.ts)
 - **taskTypes.ts** -- Enums (TaskInterval, TaskStatus, AutoCompleteTrigger) and interfaces (SecurityTaskDefinition, TaskInstance)
 - **taskCatalog.ts** -- 23 predefined recurring security tasks across all 14 categories with configurable intervals and auto-completion triggers
 - **taskStore.ts** -- Per-project persistence via PersistenceManager to `security-tasks.json`; manages task state (complete, snooze, dismiss, interval override)
 - **taskManager.ts** -- 15-minute scheduler for overdue detection and notifications; auto-completes tasks on workspace scan and dependency check events
 - **taskTreeProvider.ts** -- VS Code TreeDataProvider for sidebar tree view; groups by status (Overdue, Pending, Completed, Snoozed, Dismissed), sorted by priority
-- **taskCommands.ts** -- Registers 4 commands: taskAction, showTaskDashboard, refreshTasks, completeAllOverdue
+- **taskCommands.ts** -- Registers 5 commands: taskAction, showTaskDetail, showTaskDashboard, refreshTasks, completeAllOverdue
+- **taskDetailPanel.ts** -- Webview panel for detailed task view with interactive actions (complete, snooze, change interval, dismiss, reinstate); auto-refreshes on task store changes
 
 ### Learning Intelligence System (ruleIntelligence.ts, adaptiveConfidence.ts, fixPatternMemory.ts, codebaseProfile.ts, scanInsights.ts, telemetryService.ts, learningPanel.ts)
 - **ruleIntelligence.ts** -- Per-rule effectiveness tracking: detections, FP rates, fix rates, AI fix success rates, resolution times, broken down by language and file pattern. Persists to `rule-intelligence.json` (2000ms debounce). Provides `getLikelyRealScore()` for ranking issues by real-world likelihood
@@ -295,6 +296,7 @@ interface SecurityRule {
 | `taskManager.ts` | ~165 | Scheduler, auto-completion, quick pick UI |
 | `taskTreeProvider.ts` | ~170 | Sidebar tree view provider |
 | `taskCommands.ts` | ~55 | Task command registration |
+| `taskDetailPanel.ts` | ~470 | Webview panel for task details and actions |
 | `ruleIntelligence.ts` | ~280 | Per-rule effectiveness tracking |
 | `adaptiveConfidence.ts` | ~100 | Bayesian confidence with learned priors |
 | `fixPatternMemory.ts` | ~300 | Cached AI fix patterns for instant replay |

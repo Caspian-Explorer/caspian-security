@@ -4,6 +4,23 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [8.1.0] - 2026-02-25
+
+### Added
+
+- **Task Detail Panel** — dedicated webview panel for viewing and managing security tasks with rich UI
+- Interactive task actions: mark complete, snooze (1hr/4hrs/1day/3days/1week), change interval, dismiss, and reinstate
+- Task metadata display: status badge, priority, interval, category, dates, completion count, and related rules
+- `showTaskDetail` command for opening task details from the tree view
+- Responsive design using VS Code theme variables with Content Security Policy
+
+### Changed
+
+- Tree view click now opens the detail panel instead of a quick-pick action menu
+- `taskAction` command redirected to show the detail panel
+
+---
+
 ## [8.0.5] - 2026-02-25
 
 ### Changed
