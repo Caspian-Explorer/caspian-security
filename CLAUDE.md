@@ -1,5 +1,9 @@
 # Caspian Security — Claude Code Instructions
 
+## Global Rules
+
+- **Do NOT include `Co-Authored-By` lines in commit messages.** Never add co-author trailers for Claude or any AI assistant.
+
 ## Pre-Commit Checklist
 
 Before every `git commit`, follow these steps **in order**. Do not skip any step. If a step fails, fix the issue and re-run from that step before continuing.
@@ -57,9 +61,36 @@ vsce package
 Confirm the extension packages into a `.vsix` without errors. Keep the `.vsix` file locally — it is needed for marketplace submission. It is already gitignored (`*.vsix`) so it will not be committed.
 
 ### 7. Commit
-Create the commit with a descriptive message in imperative mood, matching the project's established style (e.g., "Add persistent scan memory" not "Added persistent scan memory").
+Create the commit with a descriptive message in imperative mood, matching the project's established style (e.g., "Add persistent scan memory" not "Added persistent scan memory"). Do **not** include `Co-Authored-By` trailers.
 
-### 8. Post to GitHub Discussions
+### 8. Tag
+Create an annotated git tag for the new version:
+```bash
+git tag -a vX.Y.Z -m "vX.Y.Z — <short summary>"
+```
+
+### 9. Push
+Push the commit and tag to the remote:
+```bash
+git push origin main --tags
+```
+
+### 10. Create GitHub Release
+Create a GitHub Release with the `.vsix` attached:
+```bash
+gh release create vX.Y.Z caspian-security-X.Y.Z.vsix \
+  --title "vX.Y.Z — <short summary>" \
+  --notes "<changelog entries for this version>"
+```
+
+### 11. Publish to Marketplace
+Publish the extension to the VS Code Marketplace:
+```bash
+vsce publish
+```
+If the PAT has expired, re-authenticate first with `vsce login CaspianTools`.
+
+### 12. Post to GitHub Discussions
 After every commit, create a GitHub Discussion in the **Announcements** category. The post must be **social-media-ready** — the user should be able to copy-paste it directly to Twitter/X, LinkedIn, etc.
 
 **Format requirements:**

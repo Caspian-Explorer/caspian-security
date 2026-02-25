@@ -4,6 +4,21 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [8.0.4] - 2026-02-25
+
+### Added
+
+- **Git tag, GitHub Release, and Marketplace publish steps** in the pre-commit checklist (steps 8–11)
+- **Global rule** prohibiting `Co-Authored-By` trailers in commit messages
+- **Restored `.eslintrc.json`** — ESLint config is now tracked in git
+
+### Changed
+
+- Pre-commit checklist renumbered from 8 steps to 12 steps
+- GitHub Discussions post moved from step 8 to step 12
+
+---
+
 ## [8.0.3] - 2026-02-24
 
 ### Added
