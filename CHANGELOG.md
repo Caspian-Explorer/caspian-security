@@ -4,6 +4,15 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [8.0.5] - 2026-02-25
+
+### Changed
+
+- Remove Marketplace publish step from pre-commit checklist (now 11 steps)
+- Add `.claude/` directory to `.gitignore`
+
+---
+
 ## [8.0.4] - 2026-02-25
 
 ### Added

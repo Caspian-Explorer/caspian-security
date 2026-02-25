@@ -83,14 +83,7 @@ gh release create vX.Y.Z caspian-security-X.Y.Z.vsix \
   --notes "<changelog entries for this version>"
 ```
 
-### 11. Publish to Marketplace
-Publish the extension to the VS Code Marketplace:
-```bash
-vsce publish
-```
-If the PAT has expired, re-authenticate first with `vsce login CaspianTools`.
-
-### 12. Post to GitHub Discussions
+### 11. Post to GitHub Discussions
 After every commit, create a GitHub Discussion in the **Announcements** category. The post must be **social-media-ready** — the user should be able to copy-paste it directly to Twitter/X, LinkedIn, etc.
 
 **Format requirements:**
