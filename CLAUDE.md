@@ -3,6 +3,14 @@
 ## Global Rules
 
 - **Do NOT include `Co-Authored-By` lines in commit messages.** Never add co-author trailers for Claude or any AI assistant.
+- **After every task, complete ALL post-task steps.** Every code change requires:
+  1. **Version bump** — increment `package.json` version, update `CHANGELOG.md`, run `npm install` to sync lock file.
+  2. **Documentation updates** — update all affected docs: `README.md`, `ARCHITECTURE.md`, `BUILD.md`, `SETUP_GUIDE.md`, `QUICKSTART.md`, `START_HERE.md`, and `package.json` description.
+  3. **Wiki updates** — if the change affects user-facing features, update the relevant GitHub Wiki pages (clone from `https://github.com/Caspian-Explorer/caspian-security.wiki.git`, edit, commit, push).
+  4. **Build VSIX** — run `vsce package` to produce a new `.vsix` with the incremented version number. Confirm it packages without errors.
+  5. **Commit** — stage all changed files and commit with a descriptive message following the Pre-Commit Checklist below (lint, compile, review, tag, push, release, discussion post).
+  6. **Notify the user** — always tell the user the new version number and confirm the VSIX was built successfully. Never silently skip this.
+  Never skip these steps. They apply to every task, no matter how small. If you forget any step, go back and complete it before moving on.
 
 ## Pre-Commit Checklist
 

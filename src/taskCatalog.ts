@@ -16,6 +16,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.DependencyCheck,
     relatedRuleCodes: ['DEP004', 'DEP005'],
     priority: 9,
+    runCommand: 'caspian-security.checkDependencyUpdates',
   },
   {
     id: 'TASK-DEP-002',
@@ -26,6 +27,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['DEP003'],
     priority: 10,
+    runCommand: 'caspian-security.check-dependencies-supply-chain',
   },
   {
     id: 'TASK-DEP-003',
@@ -36,6 +38,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.DependencyCheck,
     relatedRuleCodes: ['DEP002'],
     priority: 7,
+    runCommand: 'caspian-security.checkDependencyUpdates',
   },
   {
     id: 'TASK-DEP-004',
@@ -46,6 +49,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['DEP006'],
     priority: 6,
+    runCommand: 'caspian-security.check-dependencies-supply-chain',
   },
 
   // ── Secrets & Credentials ──
@@ -68,6 +72,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['CRED009'],
     priority: 8,
+    runCommand: 'caspian-security.check-secrets-credentials',
   },
 
   // ── Encryption & Data Protection ──
@@ -102,6 +107,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['LOG007', 'LOG008'],
     priority: 6,
+    runCommand: 'caspian-security.check-logging-monitoring',
   },
   {
     id: 'TASK-LOG-002',
@@ -112,6 +118,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['LOG001', 'LOG009'],
     priority: 7,
+    runCommand: 'caspian-security.check-logging-monitoring',
   },
 
   // ── Infrastructure & Deployment ──
@@ -124,6 +131,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['INFRA006', 'INFRA002'],
     priority: 7,
+    runCommand: 'caspian-security.check-infrastructure-deployment',
   },
   {
     id: 'TASK-INFRA-002',
@@ -134,6 +142,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['INFRA001'],
     priority: 6,
+    runCommand: 'caspian-security.check-infrastructure-deployment',
   },
 
   // ── Authentication & Access Control ──
@@ -146,6 +155,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['AUTH006', 'AUTH003'],
     priority: 8,
+    runCommand: 'caspian-security.check-auth-access-control',
   },
 
   // ── CORS Configuration ──
@@ -158,6 +168,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['CORS001', 'CORS005'],
     priority: 7,
+    runCommand: 'caspian-security.check-cors-configuration',
   },
 
   // ── Input Validation & XSS ──
@@ -170,6 +181,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.WorkspaceScan,
     relatedRuleCodes: ['XSS001', 'XSS002'],
     priority: 8,
+    runCommand: 'caspian-security.check-input-validation-xss',
   },
 
   // ── CSRF Protection ──
@@ -182,6 +194,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['CSRF001', 'CSRF004'],
     priority: 7,
+    runCommand: 'caspian-security.check-csrf-protection',
   },
 
   // ── API Security ──
@@ -194,6 +207,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['API001', 'API003', 'API006'],
     priority: 8,
+    runCommand: 'caspian-security.check-api-security',
   },
 
   // ── Database Security ──
@@ -206,6 +220,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['DB001', 'DB003', 'DB009'],
     priority: 8,
+    runCommand: 'caspian-security.check-database-security',
   },
 
   // ── File Handling ──
@@ -218,6 +233,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['FILE002', 'FILE007', 'FILE001'],
     priority: 7,
+    runCommand: 'caspian-security.check-file-handling',
   },
 
   // ── Frontend Security ──
@@ -230,6 +246,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['FE005', 'FE003'],
     priority: 7,
+    runCommand: 'caspian-security.check-frontend-security',
   },
 
   // ── Business Logic & Payment ──
@@ -242,6 +259,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.Manual,
     relatedRuleCodes: ['BIZ002', 'BIZ006', 'BIZ001'],
     priority: 6,
+    runCommand: 'caspian-security.check-business-logic-payment',
   },
 
   // ── General / Cross-Cutting ──
@@ -254,6 +272,7 @@ export const SECURITY_TASK_CATALOG: SecurityTaskDefinition[] = [
     autoCompleteTrigger: AutoCompleteTrigger.WorkspaceScan,
     relatedRuleCodes: [],
     priority: 9,
+    runCommand: 'caspian-security.runFullScan',
   },
 ];
 

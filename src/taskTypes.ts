@@ -32,6 +32,7 @@ export interface SecurityTaskDefinition {
   autoCompleteTrigger: AutoCompleteTrigger;
   relatedRuleCodes?: string[];
   priority: number;
+  runCommand?: string;
 }
 
 export interface TaskInstance {

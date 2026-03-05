@@ -18,7 +18,16 @@
       "Bash(gh api:*)",
       "Bash(git branch:*)",
       "Bash(git push -u origin master)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git remote add origin https://github.com/Caspian-Explorer/caspian-security.git)",
+      "Bash(git tag -a v8.0.3 -m \"v8.0.3 — Kotlin/Android support with 10 security rules\")",
+      "Bash(vsce publish)",
+      "Bash(git ls-tree -r HEAD --name-only)",
+      "Bash(git rm --cached .claude/settings.local.json)",
+      "Bash(git tag -a v8.0.4 -m \"v8.0.4 — Add release automation to pre-commit checklist\")",
+      "Bash(git reset HEAD -- .claude/settings.local.json)",
+      "Bash(git tag -a v8.0.5 -m \"v8.0.5 — Remove Marketplace publish from checklist\")",
+      "Bash(git tag -a v8.1.0 -m \"v8.1.0 — Add task detail panel\")"
     ]
   }
 }

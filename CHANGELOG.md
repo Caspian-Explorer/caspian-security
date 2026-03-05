@@ -4,6 +4,19 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [8.1.1] - 2026-03-05
+
+### Fixed
+
+- Wire up "Run Check" button in task detail panel — clicking it now executes the task's associated scan command
+- Add `runCheck` message handler and webview function for task-specific scans
+
+### Changed
+
+- Add post-task global rules to CLAUDE.md (version bump, docs, wiki, VSIX build, commit, notify)
+
+---
+
 ## [8.1.0] - 2026-02-25
 
 ### Added

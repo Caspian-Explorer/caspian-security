@@ -94,11 +94,12 @@ export class TaskDetailPanel implements vscode.Disposable {
         completionCount: instance.completionCount,
         relatedRuleCodes: def.relatedRuleCodes || [],
         autoCompleteTrigger: def.autoCompleteTrigger,
+        runCommand: def.runCommand || null,
       },
     });
   }
 
-  private async handleMessage(msg: { command: string; durationMs?: number }): Promise<void> {
+  private async handleMessage(msg: { command: string; durationMs?: number; runCommand?: string }): Promise<void> {
     if (!this.currentTaskId) { return; }
     const def = getTaskDefinition(this.currentTaskId);
     const title = def?.title || this.currentTaskId;
@@ -157,6 +158,13 @@ export class TaskDetailPanel implements vscode.Disposable {
         this.taskStore.reinstateTask(this.currentTaskId);
         vscode.window.showInformationMessage(`Caspian Security: "${title}" reinstated.`);
         break;
+
+      case 'runCheck': {
+        if (msg.runCommand) {
+          vscode.commands.executeCommand(msg.runCommand);
+        }
+        break;
+      }
     }
   }
 
@@ -262,8 +270,17 @@ export class TaskDetailPanel implements vscode.Disposable {
   .btn-primary:hover { background: var(--vscode-button-hoverBackground); }
   .btn-secondary { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
   .btn-secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
+  .btn-run { background: rgba(76,175,80,0.15); color: #4caf50; font-weight: 600; border: 1px solid rgba(76,175,80,0.3); }
+  .btn-run:hover { background: rgba(76,175,80,0.28); }
   .btn-danger { background: rgba(244,67,54,0.12); color: #f44336; }
   .btn-danger:hover { background: rgba(244,67,54,0.22); }
+
+  .manual-task-note {
+    font-size: 0.88em;
+    color: var(--vscode-descriptionForeground);
+    font-style: italic;
+    margin: 8px 0;
+  }
 
   .snooze-options {
     display: flex;
@@ -318,12 +335,14 @@ export class TaskDetailPanel implements vscode.Disposable {
 
   <h2>Actions</h2>
   <div class="actions">
+    <button class="btn btn-run hidden" id="btnRun" onclick="runCheck()">Run Check</button>
     <button class="btn btn-primary" id="btnComplete" onclick="markCompleted()">Mark Complete</button>
     <button class="btn btn-secondary" id="btnSnooze" onclick="toggleSnooze()">Snooze</button>
     <button class="btn btn-secondary" id="btnInterval" onclick="changeInterval()">Change Interval</button>
     <button class="btn btn-danger" id="btnDismiss" onclick="dismiss()">Dismiss</button>
     <button class="btn btn-secondary hidden" id="btnReinstate" onclick="reinstate()">Reinstate</button>
   </div>
+  <div class="manual-task-note hidden" id="manualNote">This is a manual task &mdash; no automated check available.</div>
   <div class="snooze-options hidden" id="snoozeOptions">
     <button class="btn btn-secondary btn-small" onclick="snooze(3600000)">1 hour</button>
     <button class="btn btn-secondary btn-small" onclick="snooze(14400000)">4 hours</button>
@@ -340,6 +359,7 @@ export class TaskDetailPanel implements vscode.Disposable {
 <script nonce="${nonce}">
 const vscode = acquireVsCodeApi();
 let snoozeVisible = false;
+var currentRunCommand = null;
 
 window.addEventListener('message', function(e) {
   if (e.data.type === 'update') {
@@ -397,6 +417,9 @@ function render(d) {
   }
 
   var isDismissed = d.status === 'dismissed';
+  currentRunCommand = d.runCommand;
+  toggle('btnRun', !!d.runCommand && !isDismissed);
+  toggle('manualNote', !d.runCommand && !isDismissed);
   toggle('btnComplete', !isDismissed);
   toggle('btnSnooze', !isDismissed);
   toggle('btnInterval', !isDismissed);
@@ -448,6 +471,12 @@ function dismiss() {
 
 function reinstate() {
   vscode.postMessage({ command: 'reinstate' });
+}
+
+function runCheck() {
+  if (currentRunCommand) {
+    vscode.postMessage({ command: 'runCheck', runCommand: currentRunCommand });
+  }
 }
 </script>
 </body>
