@@ -4,6 +4,13 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [8.1.3] - 2026-03-06
+
+### Fixed
+
+- Fix task detail panel buttons (Run Check, Mark Complete, Snooze, etc.) not responding to clicks
+- Replace inline onclick handlers with addEventListener to comply with webview Content Security Policy
+
 ## [8.1.2] - 2026-03-06
 
 ### Fixed

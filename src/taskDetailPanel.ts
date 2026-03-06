@@ -335,20 +335,20 @@ export class TaskDetailPanel implements vscode.Disposable {
 
   <h2>Actions</h2>
   <div class="actions">
-    <button class="btn btn-run hidden" id="btnRun" onclick="runCheck()">Run Check</button>
-    <button class="btn btn-primary" id="btnComplete" onclick="markCompleted()">Mark Complete</button>
-    <button class="btn btn-secondary" id="btnSnooze" onclick="toggleSnooze()">Snooze</button>
-    <button class="btn btn-secondary" id="btnInterval" onclick="changeInterval()">Change Interval</button>
-    <button class="btn btn-danger" id="btnDismiss" onclick="dismiss()">Dismiss</button>
-    <button class="btn btn-secondary hidden" id="btnReinstate" onclick="reinstate()">Reinstate</button>
+    <button class="btn btn-run hidden" id="btnRun">Run Check</button>
+    <button class="btn btn-primary" id="btnComplete">Mark Complete</button>
+    <button class="btn btn-secondary" id="btnSnooze">Snooze</button>
+    <button class="btn btn-secondary" id="btnInterval">Change Interval</button>
+    <button class="btn btn-danger" id="btnDismiss">Dismiss</button>
+    <button class="btn btn-secondary hidden" id="btnReinstate">Reinstate</button>
   </div>
   <div class="manual-task-note hidden" id="manualNote">This is a manual task &mdash; no automated check available.</div>
   <div class="snooze-options hidden" id="snoozeOptions">
-    <button class="btn btn-secondary btn-small" onclick="snooze(3600000)">1 hour</button>
-    <button class="btn btn-secondary btn-small" onclick="snooze(14400000)">4 hours</button>
-    <button class="btn btn-secondary btn-small" onclick="snooze(86400000)">1 day</button>
-    <button class="btn btn-secondary btn-small" onclick="snooze(259200000)">3 days</button>
-    <button class="btn btn-secondary btn-small" onclick="snooze(604800000)">1 week</button>
+    <button class="btn btn-secondary btn-small" data-snooze="3600000">1 hour</button>
+    <button class="btn btn-secondary btn-small" data-snooze="14400000">4 hours</button>
+    <button class="btn btn-secondary btn-small" data-snooze="86400000">1 day</button>
+    <button class="btn btn-secondary btn-small" data-snooze="259200000">3 days</button>
+    <button class="btn btn-secondary btn-small" data-snooze="604800000">1 week</button>
   </div>
 </div>
 
@@ -360,6 +360,19 @@ export class TaskDetailPanel implements vscode.Disposable {
 const vscode = acquireVsCodeApi();
 let snoozeVisible = false;
 var currentRunCommand = null;
+
+document.getElementById('btnRun').addEventListener('click', runCheck);
+document.getElementById('btnComplete').addEventListener('click', markCompleted);
+document.getElementById('btnSnooze').addEventListener('click', toggleSnooze);
+document.getElementById('btnInterval').addEventListener('click', changeInterval);
+document.getElementById('btnDismiss').addEventListener('click', dismiss);
+document.getElementById('btnReinstate').addEventListener('click', reinstate);
+
+document.querySelectorAll('[data-snooze]').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    snooze(Number(btn.dataset.snooze));
+  });
+});
 
 window.addEventListener('message', function(e) {
   if (e.data.type === 'update') {
