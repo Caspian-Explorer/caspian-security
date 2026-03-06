@@ -153,6 +153,10 @@ export class ConfigManager {
     this.config.update('skipGeneratedFiles', value, vscode.ConfigurationTarget.Global);
   }
 
+  getMaxFileSize(): number {
+    return this.config.get('maxFileSize', 500000);
+  }
+
   getAIProvider(): string {
     return this.config.get('aiProvider', 'anthropic');
   }

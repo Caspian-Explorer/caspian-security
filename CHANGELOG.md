@@ -4,6 +4,23 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [8.1.2] - 2026-03-06
+
+### Fixed
+
+- Fix high CPU / unresponsive extension when scanning large minified files (e.g. `pdf.worker.min.mjs`)
+- Expand minified file path detection to cover `.min.mjs`, `.min.cjs`, and all `.min.*` extensions
+- Reorder generated-file check before line splitting to avoid unnecessary work on skipped files
+- Add line length limit (5000 chars) to skip minified lines that cause regex backtracking
+- Add per-file analysis timeout (10 seconds) to prevent any single file from freezing VS Code
+- Improve event loop yielding to run between every file instead of every 10 files
+
+### Added
+
+- New `caspianSecurity.maxFileSize` setting (default: 500KB) to skip oversized files automatically
+
+---
+
 ## [8.1.1] - 2026-03-05
 
 ### Fixed

@@ -1059,8 +1059,8 @@ async function runWorkspaceCheck() {
             break;
           }
 
-          // Yield to the event loop every 10 files to keep VS Code responsive
-          if (i % 10 === 0 && i > 0) {
+          // Yield to the event loop between files to keep VS Code responsive
+          if (i > 0) {
             await new Promise(resolve => setTimeout(resolve, 0));
           }
 

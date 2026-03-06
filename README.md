@@ -27,6 +27,7 @@ What sets it apart: **context-aware intelligence**. The scanner classifies detec
 - **Cancellable scans** -- workspace scans show progress and can be cancelled mid-run
 - **Configurable severity** -- filter diagnostics by error, warning, or info thresholds
 - **False positive controls** -- context-aware rules, generated file detection, masking function detection, internal-path severity reduction, pagination-aware rules, and a toggle to hide informational reminders
+- **Performance safeguards** -- automatic skipping of minified/generated files, configurable file size limit, per-file analysis timeout, and line length guards to prevent high CPU on large codebases
 - **Learning Intelligence** -- the extension learns from every scan, fix, ignore, and false positive to improve accuracy over time: adaptive confidence scoring, fix pattern memory for instant replays, codebase-specific safe pattern learning, regression detection, and actionable insights
 - **Security Task Management** -- 23 recurring security tasks across all 14 categories with configurable intervals, overdue reminders, auto-completion on scans, per-project persistence, and a dedicated detail panel for viewing and managing tasks
 
@@ -259,6 +260,8 @@ Open VS Code Settings (`Ctrl+,`) and search for **"Caspian Security"** to config
 | `caspianSecurity.includeDependencyCheck` | boolean | `true` | Include dependency update and vulnerability checks during workspace scans |
 | `caspianSecurity.showInformational`      | boolean  | `true`    | Show informational reminders alongside security findings. Disable to see only actionable issues |
 | `caspianSecurity.reduceInternalPathSeverity` | boolean | `true` | Reduce severity for files in admin, scripts, internal, seed, and migration directories |
+| `caspianSecurity.skipGeneratedFiles`          | boolean  | `true`    | Skip scanning auto-generated and minified files |
+| `caspianSecurity.maxFileSize`                | number   | `500000`  | Maximum file size in characters to scan (0 = no limit) |
 | `caspianSecurity.enableTelemetry`            | boolean  | `false`   | Share anonymized rule effectiveness statistics (no code or file data) |
 
 ### AI Settings

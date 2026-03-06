@@ -268,7 +268,11 @@ interface SecurityRule {
 - **Regex compilation**: Patterns compiled once
 - **Early exit**: Skips untitled and non-file documents
 - **Batch scanning**: Workspace scans grouped by language in batches of 50
-- **Event loop yielding**: Every 10 files during workspace scan to keep UI responsive
+- **Event loop yielding**: Between every file during workspace scan to keep UI responsive
+- **Generated/minified file skip**: Path-based detection (`.min.*`, `.bundle.*`, `/dist/`, etc.) and content heuristics (avg line length, generation markers)
+- **File size limit**: Configurable `maxFileSize` (default 500KB) skips oversized files before analysis
+- **Line length guard**: Lines over 5000 characters are skipped to prevent regex backtracking on minified code
+- **Per-file timeout**: Analysis is capped at 10 seconds per file to prevent any single file from freezing VS Code
 - **Informational dedup**: Informational rules collect up to 10 candidates, fire once per file
 
 ## File Sizes

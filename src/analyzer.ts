@@ -32,19 +32,38 @@ export class SecurityAnalyzer {
       const rules = this.resolveRules(categories);
       const issues: SecurityIssue[] = [];
       const text = document.getText();
-      const lines = text.split('\n');
-      const informationalFired = new Set<string>();
-      const informationalCandidates = new Map<string, SecurityIssue[]>();
       const filePath = document.uri.fsPath;
 
-      // Skip generated files if enabled
+      // Skip generated files if enabled (check BEFORE splitting into lines)
       const config = ConfigManager.getInstance();
       if (config.getSkipGeneratedFiles() && isGeneratedFile(filePath, text)) {
         return [];
       }
 
+      // Skip files exceeding max size
+      const maxFileSize = config.getMaxFileSize();
+      if (maxFileSize > 0 && text.length > maxFileSize) {
+        return [];
+      }
+
+      const lines = text.split('\n');
+      const informationalFired = new Set<string>();
+      const informationalCandidates = new Map<string, SecurityIssue[]>();
+      const deadline = Date.now() + 10000;
+
       for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+        // Per-file timeout: bail out if analysis exceeds 10 seconds
+        if (lineNum % 100 === 0 && lineNum > 0 && Date.now() > deadline) {
+          break;
+        }
+
         const line = lines[lineNum];
+
+        // Skip extremely long lines (likely minified code)
+        if (line.length > 5000) {
+          continue;
+        }
+
         const lineLower = line.toLowerCase();
 
         for (const rule of rules) {

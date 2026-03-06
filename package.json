@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/Caspian-Explorer/caspian-security"
   },
-  "version": "8.1.1",
+  "version": "8.1.2",
   "publisher": "CaspianTools",
   "license": "MIT",
   "engines": {
@@ -443,6 +443,11 @@
           "type": "boolean",
           "default": true,
           "description": "Skip scanning auto-generated and minified files (detected by @generated markers, file patterns, or minification heuristics)"
+        },
+        "caspianSecurity.maxFileSize": {
+          "type": "number",
+          "default": 500000,
+          "description": "Maximum file size in characters to scan. Files larger than this are skipped to prevent high CPU usage. Set to 0 to disable the limit."
         },
         "caspianSecurity.aiModel": {
           "type": "string",
