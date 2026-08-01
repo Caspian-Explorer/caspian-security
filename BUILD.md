@@ -24,6 +24,11 @@ npm run compile
 
 Generates JavaScript files in `out/` from TypeScript sources in `src/`.
 
+> The build emits plain `.js` only — `declaration` and `sourceMap` are off
+> in `tsconfig.json` (this is an application, not a typed library, and the
+> published VSIX shouldn't carry `.d.ts`/`.js.map` weight). Flip either flag
+> on locally if you need declarations or step-debugging.
+
 ### 3. Run in Development Mode
 
 **Option A: VS Code debug mode**

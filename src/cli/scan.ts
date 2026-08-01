@@ -35,8 +35,7 @@ import {
   SEVERITY_LABELS,
   CATEGORY_LABELS,
 } from '../types';
-import { isGeneratedFile } from '../generatedFileDetector';
-import { walkFiles, resolveLanguage, scanFile, FileResult } from '../scanRunner';
+import { walkFiles, runWorkspaceScanParallel, FileResult } from '../scanRunner';
 import { buildSARIF, resolveToolVersion } from '../sarif';
 import { loadBaseline, buildBaseline, writeBaseline, applyBaseline, Baseline } from '../baseline';
 import { getChangedFilesSince } from '../gitDiff';
@@ -54,6 +53,7 @@ export interface CliOptions {
   baselinePath?: string;
   updateBaseline: boolean;
   changedSince?: string;
+  concurrency?: number;
 }
 
 export function parseArgs(argv: string[]): CliOptions {
@@ -121,6 +121,14 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--changed-since':
         opts.changedSince = next();
         break;
+      case '--concurrency': {
+        const v = parseInt(next(), 10);
+        if (Number.isNaN(v) || v < 1) {
+          throw new Error(`--concurrency must be a positive integer (got ${argv[i]})`);
+        }
+        opts.concurrency = v;
+        break;
+      }
       default:
         if (a.startsWith('-')) {
           throw new Error(`unknown flag: ${a}`);
@@ -150,6 +158,8 @@ function printHelp(): void {
     '                                or plain substrings of the file path\n' +
     '  --exclude <dir,dir,...>       additional directory names to skip\n' +
     '  --max-file-size <bytes>       skip files larger than this (default: 500000)\n' +
+    '  --concurrency <n>             worker threads for large scans (default: CPU count;\n' +
+    '                                small scans run inline regardless)\n' +
     '  --baseline <file>             suppress findings listed in baseline; only NEW\n' +
     '                                findings above the baseline count gate the build\n' +
     '  --update-baseline             regenerate <baseline> to match the current scan,\n' +
@@ -242,7 +252,6 @@ export async function runScanCli(argv: string[] = process.argv.slice(2)): Promis
     process.exit(2);
   }
 
-  const rules = getAllRules();
   let files = walkFiles(opts.workspace, opts.exclude, opts.include);
 
   // --changed-since: restrict the file set to what differs from the given
@@ -265,37 +274,17 @@ export async function runScanCli(argv: string[] = process.argv.slice(2)): Promis
       `${files.length}/${before} scannable)`;
   }
 
-  const results: FileResult[] = [];
-  let filesSkipped = 0;
-
-  for (const fp of files) {
-    let stat: fs.Stats;
-    try {
-      stat = fs.statSync(fp);
-    } catch {
-      continue;
-    }
-    if (opts.maxFileSize > 0 && stat.size > opts.maxFileSize) { filesSkipped++; continue; }
-
-    let text: string;
-    try {
-      text = fs.readFileSync(fp, 'utf-8');
-    } catch {
-      continue;
-    }
-
-    if (isGeneratedFile(fp, text)) { filesSkipped++; continue; }
-
-    const languageId = resolveLanguage(fp);
-    const relativePath = path.relative(opts.workspace, fp) || fp;
-
-    const issues = scanFile(fp, text, rules);
-    if (issues.length > 0) {
-      results.push({ filePath: fp, relativePath, languageId, issues });
-    }
-  }
-
-  const totalIssues = results.reduce((n, r) => n + r.issues.length, 0);
+  // Scan across worker threads when the file set is large enough to earn
+  // back the thread overhead; otherwise this transparently runs inline.
+  const scan = await runWorkspaceScanParallel({
+    workspace: opts.workspace,
+    files,
+    maxFileSize: opts.maxFileSize,
+    concurrency: opts.concurrency,
+  });
+  const results: FileResult[] = scan.results;
+  const filesSkipped = scan.filesSkipped;
+  const totalIssues = scan.totalIssues;
 
   // --update-baseline: write the current findings as the new baseline and exit.
   if (opts.updateBaseline) {

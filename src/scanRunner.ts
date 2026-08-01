@@ -75,6 +75,12 @@ export interface RunScanResult {
   totalIssues: number;
 }
 
+/** Shape of a worker's reply — mirrors ScanWorkerResult in scanWorker.ts. */
+interface ScanWorkerResult {
+  results: FileResult[];
+  filesSkipped: number;
+}
+
 /**
  * Convert a glob pattern (`*`, `**`, `?`) to a RegExp over forward-slash
  * paths. A pattern without a `/` matches against the basename, so
@@ -451,10 +457,28 @@ export function pickBestInformationalCandidate(candidates: SecurityIssue[], line
  * results. I/O-free beyond fs.readFileSync on the files themselves —
  * the caller chooses how to present / persist the data.
  */
-export function runWorkspaceScan(options: RunScanOptions): RunScanResult {
-  const rules = getAllRules();
+export function runWorkspaceScan(options: RunScanOptions & { files?: string[] }): RunScanResult {
   const maxFileSize = options.maxFileSize ?? 500_000;
-  const files = walkFiles(options.workspace, options.exclude || [], options.include || []);
+  const files = options.files ?? walkFiles(options.workspace, options.exclude || [], options.include || []);
+  const { results, filesSkipped } = scanFileList(
+    files, options.workspace, maxFileSize, options.runTaint !== false
+  );
+  const totalIssues = results.reduce((n, r) => n + r.issues.length, 0);
+  return { results, filesScanned: files.length, filesSkipped, totalIssues };
+}
+
+/**
+ * Scan an explicit list of file paths (read → size/generated filter →
+ * scan). Shared by the sync scan, the CLI, and the worker thread so all
+ * three apply identical per-file filtering.
+ */
+export function scanFileList(
+  files: string[],
+  workspace: string,
+  maxFileSize: number,
+  runTaint: boolean
+): { results: FileResult[]; filesSkipped: number } {
+  const rules = getAllRules();
   const results: FileResult[] = [];
   let filesSkipped = 0;
 
@@ -469,13 +493,97 @@ export function runWorkspaceScan(options: RunScanOptions): RunScanResult {
     if (isGeneratedFile(fp, text)) { filesSkipped++; continue; }
 
     const languageId = resolveLanguage(fp);
-    const relativePath = path.relative(options.workspace, fp) || fp;
-    const issues = scanFile(fp, text, rules, options.runTaint !== false);
+    const relativePath = path.relative(workspace, fp) || fp;
+    const issues = scanFile(fp, text, rules, runTaint);
     if (issues.length > 0) {
       results.push({ filePath: fp, relativePath, languageId, issues });
     }
   }
 
-  const totalIssues = results.reduce((n, r) => n + r.issues.length, 0);
-  return { results, filesScanned: files.length, filesSkipped, totalIssues };
+  return { results, filesSkipped };
+}
+
+/**
+ * Split `items` into at most `n` roughly-even contiguous chunks.
+ * Exported for testing.
+ */
+export function chunkEvenly<T>(items: T[], n: number): T[][] {
+  if (n <= 1 || items.length <= 1) { return items.length ? [items] : []; }
+  const chunks: T[][] = [];
+  const size = Math.ceil(items.length / n);
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/**
+ * Parallel workspace scan across worker threads. Falls back to the
+ * synchronous {@link runWorkspaceScan} when the pool would be a single
+ * worker, when the file count is below `minFilesForParallel`, or when
+ * worker threads are unavailable. Results are order-independent, so the
+ * merged output is deterministic given a deterministic file walk.
+ */
+export async function runWorkspaceScanParallel(
+  options: RunScanOptions & {
+    concurrency?: number;
+    minFilesForParallel?: number;
+    /** Pre-resolved file list (e.g. from a --changed-since filter). When
+     * omitted, the workspace is walked. */
+    files?: string[];
+  }
+): Promise<RunScanResult> {
+  const maxFileSize = options.maxFileSize ?? 500_000;
+  const runTaint = options.runTaint !== false;
+  const files = options.files ?? walkFiles(options.workspace, options.exclude || [], options.include || []);
+  const minFiles = options.minFilesForParallel ?? 200;
+
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const os = require('os') as typeof import('os');
+  const cpuCount = Math.max(1, (os.cpus?.() || []).length || 1);
+  const workerCount = Math.max(1, Math.min(options.concurrency ?? cpuCount, cpuCount));
+
+  // Not worth the thread overhead — run inline.
+  if (workerCount <= 1 || files.length < minFiles) {
+    return runWorkspaceScan({ ...options, files, maxFileSize, runTaint });
+  }
+
+  let Worker: typeof import('worker_threads').Worker;
+  try {
+    ({ Worker } = require('worker_threads') as typeof import('worker_threads'));
+  } catch {
+    return runWorkspaceScan({ ...options, files, maxFileSize, runTaint });
+  }
+
+  // The compiled worker lives next to this module in out/. When running
+  // from ts source (tests), fall back to the sync path.
+  const workerPath = path.join(__dirname, 'scanWorker.js');
+  if (!fs.existsSync(workerPath)) {
+    return runWorkspaceScan({ ...options, files, maxFileSize, runTaint });
+  }
+
+  const chunks = chunkEvenly(files, workerCount);
+  const merged: FileResult[] = [];
+  let filesSkipped = 0;
+
+  await Promise.all(chunks.map(chunk => new Promise<void>((resolve, reject) => {
+    const worker = new Worker(workerPath, {
+      workerData: { files: chunk, workspace: options.workspace, maxFileSize, runTaint },
+    });
+    worker.once('message', (res: ScanWorkerResult) => {
+      merged.push(...res.results);
+      filesSkipped += res.filesSkipped;
+    });
+    worker.once('error', reject);
+    worker.once('exit', code => {
+      if (code !== 0) { reject(new Error(`scan worker exited with code ${code}`)); }
+      else { resolve(); }
+    });
+  })));
+
+  // Stable ordering by path so output doesn't depend on which worker
+  // finished first.
+  merged.sort((a, b) => a.filePath.localeCompare(b.filePath));
+  const totalIssues = merged.reduce((n, r) => n + r.issues.length, 0);
+  return { results: merged, filesScanned: files.length, filesSkipped, totalIssues };
 }

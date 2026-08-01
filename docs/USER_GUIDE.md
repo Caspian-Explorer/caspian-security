@@ -131,9 +131,10 @@ caspian scan [path]
   --format sarif|json|text          output format (default: sarif)
   --fail-on error|warning|info|never  exit-code threshold (default: error)
   --output <file>                   write to a file instead of stdout
-  --include <substr,substr,...>     extra path substrings to include
-  --exclude <substr,substr,...>     directory names to skip
+  --include <glob,glob,...>         extra files to scan: globs (*.proto) or substrings
+  --exclude <dir,dir,...>           directory names to skip
   --max-file-size <bytes>           skip files larger than this (default: 500000)
+  --concurrency <n>                 worker threads for large scans (default: CPU count)
   --baseline <file>                 suppress known findings; only NEW ones gate
   --update-baseline                 regenerate <baseline>, then exit 0
   --changed-since <ref>             scan only files changed since <ref> (PR scope)

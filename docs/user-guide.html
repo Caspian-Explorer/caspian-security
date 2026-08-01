@@ -202,9 +202,10 @@ caspian mcp-config --client cursor    # MCP config for a client</code></pre>
   --format sarif|json|text            output format (default: sarif)
   --fail-on error|warning|info|never  exit-code threshold (default: error)
   --output &lt;file&gt;                     write to a file instead of stdout
-  --include &lt;substr,substr,...&gt;       extra path substrings to include
-  --exclude &lt;substr,substr,...&gt;       directory names to skip
+  --include &lt;glob,glob,...&gt;           extra files to scan: globs (*.proto) or substrings
+  --exclude &lt;dir,dir,...&gt;             directory names to skip
   --max-file-size &lt;bytes&gt;             skip files larger than this (default: 500000)
+  --concurrency &lt;n&gt;                   worker threads for large scans (default: CPU count)
   --baseline &lt;file&gt;                   suppress known findings; only NEW ones gate
   --update-baseline                   regenerate &lt;baseline&gt;, then exit 0
   --changed-since &lt;ref&gt;               scan only files changed since &lt;ref&gt; (PR scope)</code></pre>

@@ -4,6 +4,21 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [10.10.0] - 2026-08-01
+
+Phase B, final batch: much wider rule test coverage, parallel CLI scanning for large repos, and a slimmer VSIX.
+
+### Added
+
+- **Parallel CLI scanning** — `caspian scan` now scans across worker threads on large file sets, with a new `--concurrency <n>` flag (defaults to the CPU count; small scans still run inline to avoid thread overhead). Output is byte-for-byte identical to the single-threaded scan (results are sorted by path). New shared `scanFileList` helper backs the sync scan, the worker, and the CLI so all three filter files identically.
+- **Rule behaviour coverage 44 → 109 codes** — three new vulnerable-corpus fixtures (`flask-service.py` for Python injection/deserialization/SSRF/XXE/LDAP/crypto, `webapp.js` for auth/CORS/CSRF/API/frontend, `MainActivity.kt` for the Android `KT-*` family) plus direct assertions for 9 provider-token (`TOKEN*`) shapes, all with confidence checks. Synthetic tokens are assembled at runtime so no token-shaped literal is committed.
+
+### Changed
+
+- **Smaller VSIX** — `tsconfig.json` no longer emits `.d.ts` declarations or `.js.map` source maps (this package is an app, not a typed library). The packaged extension dropped from 330 files / ~625 KB to 118 files / ~432 KB. Neither is needed by the extension host or the CLI at runtime; flip the flags on locally for debugging.
+
+---
+
 ## [10.9.0] - 2026-08-01
 
 Phase B of the trust roadmap: every finding now carries a confidence rating (previously ~2 of 291 rules produced one on a fresh install), five new one-click fixes (13 → 18), CI now tests on Windows with a coverage gate, and the results panel stays responsive on scans with tens of thousands of findings.
