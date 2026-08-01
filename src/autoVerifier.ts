@@ -34,11 +34,13 @@ export class AutoVerifier implements vscode.Disposable {
 
     const triggerDepCheck = () => this.debouncedDepCheck();
 
-    packageJsonWatcher.onDidChange(triggerDepCheck);
-    lockFileWatcher.onDidChange(triggerDepCheck);
-    lockFileWatcher.onDidCreate(triggerDepCheck);
-
-    this.disposables.push(packageJsonWatcher, lockFileWatcher);
+    this.disposables.push(
+      packageJsonWatcher.onDidChange(triggerDepCheck),
+      lockFileWatcher.onDidChange(triggerDepCheck),
+      lockFileWatcher.onDidCreate(triggerDepCheck),
+      packageJsonWatcher,
+      lockFileWatcher
+    );
   }
 
   private debouncedDepCheck(): void {

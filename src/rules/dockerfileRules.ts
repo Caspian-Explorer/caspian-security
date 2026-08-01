@@ -59,6 +59,10 @@ export const dockerfileRules: SecurityRule[] = [
     suppressIfNearby: [
       /^\s*USER\s+(?!root\b|0\b)/im,
     ],
+    // USER legitimately appears near the END of a Dockerfile while FROM is
+    // line 1 — the default ±3-line window meant this rule fired on every
+    // Dockerfile that DID set a non-root user.
+    suppressNearbyWindow: 300,
     filePatterns: DOCKERFILE_ONLY,
     suggestion:
       'Add `USER appuser` (or a numeric UID) before the final CMD/ENTRYPOINT. Running as root inside ' +

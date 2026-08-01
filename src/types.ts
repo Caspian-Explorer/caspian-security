@@ -38,6 +38,12 @@ export interface SecurityRule {
   contextAware?: boolean;
   negativePatterns?: (RegExp | string)[];
   suppressIfNearby?: RegExp[];
+  /**
+   * Line window (± lines) that `suppressIfNearby` scans. Defaults to 3.
+   * Whole-file advisories (e.g. "Dockerfile never sets USER") need a wide
+   * window because the suppressing line is legitimately far away.
+   */
+  suppressNearbyWindow?: number;
   filePatterns?: {
     include?: RegExp[];
     exclude?: RegExp[];

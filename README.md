@@ -111,10 +111,10 @@ Findings land in the GitHub Security tab automatically. The npm CLI and the exte
 - **One-click quick-fix lightbulb** -- 13 mechanical remediations (Kubernetes `privileged: true→false`, Terraform `publicly_accessible = false`, `jwt.verify` gets `algorithms: ['RS256']`, `yaml.unsafe_load → safe_load`, etc.) applied instantly via Ctrl+. No AI round-trip, fully reversible with undo
 - **Context-aware analysis** -- classifies issues by variable source (hardcoded, static, or dynamic) with confidence badges
 - **AI fixes with function-level understanding** -- sends the entire enclosing function and traced variable definitions to the AI, not just 20 lines of context
-- **164 security rules** across 14 categories with actionable fix suggestions
+- **299 security rules** across 14 categories with actionable fix suggestions
 - **Real-time analysis** -- checks code as you type with a 1-second debounce to avoid lag
 - **Full workspace scanning** -- scans all project files on disk, not just open tabs
-- **8 languages supported** -- JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust
+- **9 languages + infrastructure files** -- JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin, plus Dockerfile, Terraform, and Kubernetes/YAML manifests
 - **Team-shareable `.caspianignore`** -- persist ignore decisions to a version-controlled file with optional reasons
 - **SARIF v2.1.0 export** -- upload scan results directly to GitHub Security Alerts
 - **Per-category toggles** -- enable or disable each security category independently
@@ -131,7 +131,7 @@ Findings land in the GitHub Security tab automatically. The npm CLI and the exte
 - **Triage Mode** -- guided walkthrough of all pending issues with one-click AI Fix, Ignore, or False Positive actions
 - **PR-Scoped Scanning** -- scan only files changed on the current branch vs main/master for focused code review
 - **Bulk Actions** -- "Ignore All" by rule code and "Why?" inline explanations on every finding
-- **Test Suite** -- 230+ unit tests validating all 164 rules, the ignore system, and the scoring algorithm
+- **Test Suite** -- 1,100+ unit tests validating the rules, the shared scan engine (vulnerable + clean corpora), the ignore system, and the scoring algorithm
 - **CI Pipeline** -- GitHub Actions with lint, compile, test on Node 18/20, and VSIX packaging
 
 ---
@@ -170,7 +170,7 @@ Findings land in the GitHub Security tab automatically. The npm CLI and the exte
 | Dependencies & Supply Chain       | 6     | DEP001--DEP006   | Version pinning, patching SLA, auditing, transitive deps       |
 | Infrastructure & Deployment       | 13    | INFRA001--008, HDR001--005 | Env separation, debug mode, security headers, Cache-Control |
 
-**Total: 164 rules** (93 code-detectable + 71 informational)
+**Total: 299 rules** — 291 pattern rules (215 code-detectable + 65 informational + 11 project advisories) + 8 taint-tracking rules
 
 ---
 

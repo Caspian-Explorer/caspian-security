@@ -399,7 +399,8 @@ Set in VS Code Settings (`Ctrl+,` → search "caspianSecurity") or workspace `.v
   "caspianSecurity.aiFixMinimalContext": true,
   "caspianSecurity.enabledLanguages": [
     "javascript", "typescript", "python", "java",
-    "csharp", "php", "go", "rust", "kotlin"
+    "csharp", "php", "go", "rust", "kotlin",
+    "yaml", "terraform", "dockerfile"
   ]
 }
 ```
@@ -498,7 +499,7 @@ Look up any rule from the CLI or MCP:
 caspian mcp   # then ask the assistant to explain e.g. FILE009
 ```
 
-Languages: **JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin** + Infrastructure-as-code (**Dockerfile, Terraform/HCL, Kubernetes YAML**).
+Languages: **JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin** + Infrastructure-as-code (**Dockerfile, Terraform/HCL, Kubernetes YAML**) — infrastructure files are scanned both in the editor and by the CLI as of 10.8.
 
 ---
 

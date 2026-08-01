@@ -298,3 +298,24 @@ function consumeRegexFlags(line: string, closeIdx: number): number {
   while (i + 1 < line.length && /[gimuysd]/.test(line[i + 1])) { i++; }
   return i;
 }
+
+/**
+ * Check if a match position falls inside JSX text content (between > and <).
+ * Heuristic: a preceding `>` (end of an opening tag) with no subsequent `<`
+ * before the column, and a `<` somewhere after the match (the closing tag).
+ * Shared by the extension analyzer and the CLI scan engine.
+ */
+export function isInsideJSXText(line: string, column: number): boolean {
+  const before = line.substring(0, column);
+
+  const lastClose = before.lastIndexOf('>');
+  if (lastClose === -1) { return false; }
+
+  const afterClose = before.substring(lastClose + 1);
+  if (afterClose.includes('<')) { return false; }
+
+  const after = line.substring(column);
+  if (after.includes('<')) { return true; }
+
+  return false;
+}

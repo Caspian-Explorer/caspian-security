@@ -28,7 +28,35 @@ export const LANGUAGE_EXTENSIONS: Record<string, string[]> = {
   go: ['go'],
   rust: ['rs'],
   kotlin: ['kt', 'kts'],
+  yaml: ['yaml', 'yml'],
+  terraform: ['tf', 'tfvars', 'hcl'],
+  dockerfile: [],
 };
+
+/**
+ * Extension-less files matched by name (Dockerfiles). Mirrors the CLI's
+ * FILENAME_TO_LANGUAGE in scanRunner.ts so editor and CLI agree.
+ */
+export const LANGUAGE_FILENAMES: Record<string, string> = {
+  Dockerfile: 'dockerfile',
+  dockerfile: 'dockerfile',
+  Containerfile: 'dockerfile',
+};
+
+export const DEFAULT_ENABLED_LANGUAGES = [
+  'javascript',
+  'typescript',
+  'python',
+  'java',
+  'csharp',
+  'php',
+  'go',
+  'rust',
+  'kotlin',
+  'yaml',
+  'terraform',
+  'dockerfile',
+];
 
 export class ConfigManager {
   private static instance: ConfigManager;
@@ -85,16 +113,7 @@ export class ConfigManager {
   }
 
   getEnabledLanguages(): string[] {
-    return this.config.get('enabledLanguages', [
-      'javascript',
-      'typescript',
-      'python',
-      'java',
-      'csharp',
-      'php',
-      'go',
-      'rust',
-    ]);
+    return this.config.get('enabledLanguages', DEFAULT_ENABLED_LANGUAGES);
   }
 
   setEnabledLanguages(languages: string[]): void {
@@ -121,9 +140,19 @@ export class ConfigManager {
   getFileGlobPattern(): string {
     const languages = this.getEnabledLanguages();
     const extensions = languages.flatMap(lang => LANGUAGE_EXTENSIONS[lang] || []);
-    if (extensions.length === 0) { return ''; }
-    if (extensions.length === 1) { return `**/*.${extensions[0]}`; }
-    return `**/*.{${extensions.join(',')}}`;
+    const filenames = Object.entries(LANGUAGE_FILENAMES)
+      .filter(([, lang]) => languages.includes(lang))
+      .map(([name]) => name);
+    const parts: string[] = [];
+    if (extensions.length === 1) {
+      parts.push(`*.${extensions[0]}`);
+    } else if (extensions.length > 1) {
+      parts.push(`*.{${extensions.join(',')}}`);
+    }
+    parts.push(...filenames);
+    if (parts.length === 0) { return ''; }
+    if (parts.length === 1) { return `**/${parts[0]}`; }
+    return `**/{${parts.join(',')}}`;
   }
 
   getEnabledCategories(): SecurityCategory[] {
@@ -187,7 +216,7 @@ export class ConfigManager {
     this.config.update('severity', 'warning', vscode.ConfigurationTarget.Global);
     this.config.update(
       'enabledLanguages',
-      ['javascript', 'typescript', 'python', 'java', 'csharp', 'php', 'go', 'rust'],
+      DEFAULT_ENABLED_LANGUAGES,
       vscode.ConfigurationTarget.Global
     );
     for (const key of Object.values(CATEGORY_SETTING_KEYS)) {

@@ -368,7 +368,8 @@ npx -y caspian-security scan . --changed-since origin/main --fail-on error</code
   "caspianSecurity.aiFixMinimalContext": true,
   "caspianSecurity.enabledLanguages": [
     "javascript", "typescript", "python", "java",
-    "csharp", "php", "go", "rust", "kotlin"
+    "csharp", "php", "go", "rust", "kotlin",
+    "yaml", "terraform", "dockerfile"
   ]
 }</code></pre>
   <p>40+ settings, including a per-category toggle (<code>caspianSecurity.enable&lt;Category&gt;</code>) for each of the 14 categories.</p>
@@ -430,7 +431,7 @@ DB001 src/api/users.ts:100</code></pre>
     <tr><td>Dependencies &amp; Supply Chain</td><td>Unpinned versions (<code>"*"</code>, <code>^</code>), audit findings</td></tr>
     <tr><td>Infrastructure &amp; Deployment</td><td>Dockerfile / Terraform / Kubernetes misconfig, test data in prod</td></tr>
   </table>
-  <p>Languages: <strong>JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin</strong> + Infrastructure-as-code (<strong>Dockerfile, Terraform/HCL, Kubernetes YAML</strong>). Look up any rule via the MCP tools <code>list_rules</code> / <code>explain_rule</code>.</p>
+  <p>Languages: <strong>JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin</strong> + Infrastructure-as-code (<strong>Dockerfile, Terraform/HCL, Kubernetes YAML</strong>) — infrastructure files are scanned both in the editor and by the CLI as of 10.8. Look up any rule via the MCP tools <code>list_rules</code> / <code>explain_rule</code>.</p>
 
   <!-- 10 -->
   <h2 id="severity">10. Severity &amp; confidence</h2>

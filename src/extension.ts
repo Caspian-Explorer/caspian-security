@@ -3,8 +3,9 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { SecurityAnalyzer } from './analyzer';
 import { DiagnosticsManager } from './diagnosticsManager';
-import { ConfigManager, LANGUAGE_EXTENSIONS } from './configManager';
-import { SecurityCategory, SecuritySeverity, CATEGORY_LABELS, ProjectAdvisory } from './types';
+import { ConfigManager, LANGUAGE_EXTENSIONS, LANGUAGE_FILENAMES } from './configManager';
+import { SecurityCategory, SecuritySeverity, CATEGORY_LABELS } from './types';
+import { AdvisorySink } from './scanRunner';
 import { ResultsStore } from './resultsStore';
 import { StatusBarManager, ScanState } from './statusBarManager';
 import { ResultsPanel } from './resultsPanel';
@@ -63,7 +64,7 @@ function createScanBatches(files: vscode.Uri[]): ScanBatch[] {
   const groups = new Map<string, vscode.Uri[]>();
   for (const file of files) {
     const ext = path.extname(file.fsPath).slice(1).toLowerCase();
-    const language = extToLang[ext];
+    const language = extToLang[ext] || LANGUAGE_FILENAMES[path.basename(file.fsPath)];
     if (!language) { continue; }
     if (!groups.has(language)) { groups.set(language, []); }
     groups.get(language)!.push(file);
@@ -203,9 +204,14 @@ export function activate(context: vscode.ExtensionContext) {
     // Connect scan history to status bar
     statusBarManager.setScanHistoryStore(scanHistoryStore);
 
-    // Load persistence stores (non-blocking) and restore cached results
+    // Load persistence stores (non-blocking). The file-state cache only
+    // loads when the persistent cache is enabled; issues themselves are
+    // never persisted, so there is nothing to "restore" beyond the
+    // change-detection metadata that drives skip-unchanged-files.
     Promise.all([
-      fileStateTracker.load(),
+      configManager.get<boolean>('enablePersistentCache', true)
+        ? fileStateTracker.load()
+        : Promise.resolve(),
       falsePositiveStore.load(),
       scanHistoryStore.load(),
       ruleIntelligence.load(),
@@ -228,11 +234,6 @@ export function activate(context: vscode.ExtensionContext) {
         codebaseProfile, scanHistoryStore
       );
       context.subscriptions.push(learningPanel);
-
-      const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      if (wsRoot && configManager.get<boolean>('enablePersistentCache', true)) {
-        restoreCachedResults(wsRoot);
-      }
 
       // Initialize Security Task Management
       taskStore = new TaskStore();
@@ -305,11 +306,13 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     // Forward scan results to welcome panel (only updates if panel is already visible)
-    resultsStore.onDidChange(() => {
-      if (welcomePanel) {
-        welcomePanel.updateResults();
-      }
-    });
+    context.subscriptions.push(
+      resultsStore.onDidChange(() => {
+        if (welcomePanel) {
+          welcomePanel.updateResults();
+        }
+      })
+    );
 
     console.log('Caspian Security initialized successfully');
   } catch (error) {
@@ -1219,7 +1222,9 @@ async function checkDocumentByCategory(
 }
 
 function registerDocumentListeners(context: vscode.ExtensionContext) {
-  let changeTimeout: NodeJS.Timeout | undefined;
+  // One debounce timer PER document — a single shared timer would drop
+  // file A's pending scan when the user switches to file B within 1s.
+  const changeTimeouts = new Map<string, NodeJS.Timeout>();
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument((event) => {
@@ -1228,10 +1233,15 @@ function registerDocumentListeners(context: vscode.ExtensionContext) {
       }
 
       if (configManager.getAutoCheck()) {
-        clearTimeout(changeTimeout);
-        changeTimeout = setTimeout(() => {
+        const key = event.document.uri.toString();
+        const existing = changeTimeouts.get(key);
+        if (existing) {
+          clearTimeout(existing);
+        }
+        changeTimeouts.set(key, setTimeout(() => {
+          changeTimeouts.delete(key);
           checkDocument(event.document);
-        }, 1000);
+        }, 1000));
       }
     })
   );
@@ -1250,6 +1260,12 @@ function registerDocumentListeners(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.workspace.onDidCloseTextDocument((document) => {
+      const key = document.uri.toString();
+      const pending = changeTimeouts.get(key);
+      if (pending) {
+        clearTimeout(pending);
+        changeTimeouts.delete(key);
+      }
       diagnosticsManager.clearDiagnostics(document.uri);
       resultsStore.clearFileResults(document.uri.toString());
     })
@@ -1257,9 +1273,10 @@ function registerDocumentListeners(context: vscode.ExtensionContext) {
 
   context.subscriptions.push({
     dispose: () => {
-      if (changeTimeout) {
-        clearTimeout(changeTimeout);
+      for (const timer of changeTimeouts.values()) {
+        clearTimeout(timer);
       }
+      changeTimeouts.clear();
     }
   });
 }
@@ -1326,7 +1343,7 @@ async function checkDocument(document: vscode.TextDocument, categories?: Securit
 
     // Record file state for persistent caching
     if (fileStateTracker) {
-      fileStateTracker.recordScan(relativePath, document.uri.fsPath, document.languageId, issues);
+      fileStateTracker.recordScan(relativePath, document.uri.fsPath, document.languageId, issues, document.getText());
     }
 
     // Record detections for rule intelligence learning
@@ -1393,6 +1410,10 @@ async function runWorkspaceCheck(categoryFilter?: SecurityCategory[]) {
 
   const skipUnchanged = configManager.get<boolean>('skipUnchangedFiles', true);
 
+  // Project advisories are collected during the main scan pass (and from
+  // cache-hit files below) instead of a second full re-scan of every file.
+  const advisorySink: AdvisorySink = { fired: new Set<string>(), advisories: [] };
+
   let userStopped = false;
 
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
@@ -1414,9 +1435,11 @@ async function runWorkspaceCheck(categoryFilter?: SecurityCategory[]) {
             break;
           }
 
-          // Yield to the event loop between files to keep VS Code responsive
+          // Yield to the event loop between files to keep VS Code
+          // responsive. setImmediate, not setTimeout(0): timers clamp to
+          // ~1ms each, which alone costs ~10s across a 10k-file workspace.
           if (i > 0) {
-            await new Promise(resolve => setTimeout(resolve, 0));
+            await new Promise(resolve => setImmediate(resolve));
           }
 
           const file = batch.files[i];
@@ -1453,6 +1476,15 @@ async function runWorkspaceCheck(categoryFilter?: SecurityCategory[]) {
                   scannedAt: new Date(),
                 });
 
+                // Cache hits skip the rule pass, so collect their
+                // project advisories with the cheap advisory-only pass.
+                for (const advisory of analyzer.collectProjectAdvisories(document, categoryFilter || configManager.getEnabledCategories())) {
+                  if (!advisorySink.fired.has(advisory.code)) {
+                    advisorySink.fired.add(advisory.code);
+                    advisorySink.advisories.push(advisory);
+                  }
+                }
+
                 batchIssueCount += issues.length;
                 batchFilesScanned++;
                 totalFilesSkipped++;
@@ -1463,7 +1495,7 @@ async function runWorkspaceCheck(categoryFilter?: SecurityCategory[]) {
 
           const document = await vscode.workspace.openTextDocument(file);
           const categories = categoryFilter || configManager.getEnabledCategories();
-          let issues = await analyzer.analyzeDocument(document, categories);
+          let issues = await analyzer.analyzeDocument(document, categories, advisorySink);
 
           // Apply false positive filtering
           if (falsePositiveStore) {
@@ -1485,7 +1517,7 @@ async function runWorkspaceCheck(categoryFilter?: SecurityCategory[]) {
 
           // Record file state for caching
           if (fileStateTracker) {
-            fileStateTracker.recordScan(relativePath, file.fsPath, document.languageId, issues);
+            fileStateTracker.recordScan(relativePath, file.fsPath, document.languageId, issues, document.getText());
           }
 
           batchIssueCount += issues.length;
@@ -1537,25 +1569,8 @@ async function runWorkspaceCheck(categoryFilter?: SecurityCategory[]) {
     }
   }
 
-  // Collect project-level advisories from scanned files
-  const allAdvisories: ProjectAdvisory[] = [];
-  const advisoryFired = new Set<string>();
-  for (const result of resultsStore.getAllResults()) {
-    try {
-      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(result.filePath));
-      const categories = configManager.getEnabledCategories();
-      const fileAdvisories = analyzer.collectProjectAdvisories(doc, categories);
-      for (const advisory of fileAdvisories) {
-        if (!advisoryFired.has(advisory.code)) {
-          advisoryFired.add(advisory.code);
-          allAdvisories.push(advisory);
-        }
-      }
-    } catch {
-      // File may be unavailable
-    }
-  }
-  resultsStore.setProjectAdvisories(allAdvisories);
+  // Project advisories were collected during the main scan pass.
+  resultsStore.setProjectAdvisories(advisorySink.advisories);
 
   // CRED007a: Check .gitignore for .env entries
   checkGitignoreForSensitiveFiles();
@@ -1597,7 +1612,7 @@ async function runWorkspaceCheck(categoryFilter?: SecurityCategory[]) {
   }
 
   const skippedNote = totalFilesSkipped > 0 ? ` (${totalFilesSkipped} cached)` : '';
-  const advisoryNote = allAdvisories.length > 0 ? ` + ${allAdvisories.length} advisory(ies)` : '';
+  const advisoryNote = advisorySink.advisories.length > 0 ? ` + ${advisorySink.advisories.length} advisory(ies)` : '';
   vscode.window.showInformationMessage(
     `Caspian Security: Scan ${userStopped ? 'stopped' : 'complete'} — ${totalIssueCount} issue(s) found in ${totalFilesScanned} files${skippedNote}${advisoryNote}`
   );
@@ -1633,6 +1648,7 @@ async function runUncommittedCheck() {
 
   let issueCount = 0;
   const startTime = Date.now();
+  const advisorySink: AdvisorySink = { fired: new Set<string>(), advisories: [] };
 
   resultsStore.clearAll();
   statusBarManager.setState(ScanState.Scanning);
@@ -1661,7 +1677,7 @@ async function runUncommittedCheck() {
 
         const document = await vscode.workspace.openTextDocument(supportedFiles[i]);
         const categories = configManager.getEnabledCategories();
-        let issues = await analyzer.analyzeDocument(document, categories);
+        let issues = await analyzer.analyzeDocument(document, categories, advisorySink);
 
         // Apply false positive filtering
         if (falsePositiveStore) {
@@ -1681,7 +1697,7 @@ async function runUncommittedCheck() {
 
         // Record file state for caching
         if (fileStateTracker) {
-          fileStateTracker.recordScan(relativePath, supportedFiles[i].fsPath, document.languageId, issues);
+          fileStateTracker.recordScan(relativePath, supportedFiles[i].fsPath, document.languageId, issues, document.getText());
         }
 
         issueCount += issues.length;
@@ -1689,25 +1705,8 @@ async function runUncommittedCheck() {
     }
   );
 
-  // Collect project-level advisories from scanned files
-  const uncommittedAdvisories: ProjectAdvisory[] = [];
-  const uncommittedAdvisoryFired = new Set<string>();
-  for (const result of resultsStore.getAllResults()) {
-    try {
-      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(result.filePath));
-      const categories = configManager.getEnabledCategories();
-      const fileAdvisories = analyzer.collectProjectAdvisories(doc, categories);
-      for (const advisory of fileAdvisories) {
-        if (!uncommittedAdvisoryFired.has(advisory.code)) {
-          uncommittedAdvisoryFired.add(advisory.code);
-          uncommittedAdvisories.push(advisory);
-        }
-      }
-    } catch {
-      // File may be unavailable
-    }
-  }
-  resultsStore.setProjectAdvisories(uncommittedAdvisories);
+  // Project advisories were collected during the main scan pass.
+  resultsStore.setProjectAdvisories(advisorySink.advisories);
 
   // CRED007a: Check .gitignore for .env entries
   checkGitignoreForSensitiveFiles();
@@ -1989,7 +1988,26 @@ function shouldCheckDocument(document: vscode.TextDocument): boolean {
   }
 
   const enabledLanguages = configManager.getEnabledLanguages();
-  return enabledLanguages.includes(document.languageId);
+  if (enabledLanguages.includes(document.languageId)) {
+    return true;
+  }
+
+  // Fall back to resolving the language from the file path. Terraform has
+  // no built-in VS Code language id (a .tf file opens as plaintext unless
+  // the HashiCorp extension is installed), so a languageId check alone
+  // would silently skip the infrastructure rules.
+  const basename = path.basename(document.uri.fsPath);
+  const byFilename = LANGUAGE_FILENAMES[basename];
+  if (byFilename && enabledLanguages.includes(byFilename)) {
+    return true;
+  }
+  const ext = path.extname(basename).slice(1).toLowerCase();
+  for (const [lang, exts] of Object.entries(LANGUAGE_EXTENSIONS)) {
+    if (exts.includes(ext)) {
+      return enabledLanguages.includes(lang);
+    }
+  }
+  return false;
 }
 
 async function executeAIFixFromPanel(
@@ -2314,31 +2332,6 @@ class FixPreviewContentProvider implements vscode.TextDocumentContentProvider {
 
   provideTextDocumentContent(uri: vscode.Uri): string {
     return this.contents.get(uri.toString()) || '';
-  }
-}
-
-function restoreCachedResults(workspaceRoot: string): void {
-  if (!fileStateTracker) { return; }
-
-  let restoredCount = 0;
-  for (const [relativePath, state] of fileStateTracker.getAllStates()) {
-    if (state.cachedIssues.length > 0) {
-      const uri = vscode.Uri.file(path.join(workspaceRoot, relativePath));
-      resultsStore.setFileResults(uri.toString(), {
-        filePath: uri.fsPath,
-        relativePath,
-        languageId: state.languageId,
-        issues: state.cachedIssues,
-        scannedAt: new Date(state.lastScannedAt),
-      });
-      restoredCount++;
-    }
-  }
-
-  if (restoredCount > 0) {
-    updateHasResultsContext();
-    statusBarManager.showComplete();
-    console.log(`Caspian Security: Restored cached results for ${restoredCount} file(s)`);
   }
 }
 

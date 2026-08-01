@@ -49,7 +49,7 @@ function getUser(id) {
 
 ## What It Detects
 
-164+ security rules across 14 categories:
+299 security rules across 14 categories:
 
 | Category | Examples |
 |----------|----------|

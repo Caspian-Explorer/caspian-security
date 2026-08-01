@@ -13,27 +13,29 @@ import {
   SecurityIssue,
   SecuritySeverity,
   RuleType,
+  ProjectAdvisory,
 } from './types';
 import { isGeneratedFile } from './generatedFileDetector';
-import { buildLineStates, isInsideComment, isInsideStringContent } from './scanContext';
+import { buildLineStates, isInsideComment, isInsideStringContent, isInsideJSXText } from './scanContext';
+import { classifyConfidence } from './confidenceAnalyzer';
 import { runTaintAnalysis } from './taint';
 
-const DEFAULT_EXTENSIONS = new Set([
+export const DEFAULT_EXTENSIONS = new Set([
   'js', 'jsx', 'mjs', 'cjs',
-  'ts', 'tsx',
+  'ts', 'tsx', 'mts', 'cts',
   'py', 'java', 'cs', 'php', 'go', 'rs',
   'kt', 'kts',
   'yaml', 'yml',
   'tf', 'tfvars', 'hcl',
 ]);
 
-const DEFAULT_FILENAMES = new Set([
+export const DEFAULT_FILENAMES = new Set([
   'Dockerfile', 'dockerfile', 'Containerfile',
 ]);
 
-const EXT_TO_LANGUAGE: Record<string, string> = {
+export const EXT_TO_LANGUAGE: Record<string, string> = {
   js: 'javascript', jsx: 'javascriptreact', mjs: 'javascript', cjs: 'javascript',
-  ts: 'typescript', tsx: 'typescriptreact',
+  ts: 'typescript', tsx: 'typescriptreact', mts: 'typescript', cts: 'typescript',
   py: 'python',
   java: 'java', cs: 'csharp', php: 'php', go: 'go', rs: 'rust',
   kt: 'kotlin', kts: 'kotlin',
@@ -41,13 +43,14 @@ const EXT_TO_LANGUAGE: Record<string, string> = {
   tf: 'terraform', tfvars: 'terraform', hcl: 'terraform',
 };
 
-const FILENAME_TO_LANGUAGE: Record<string, string> = {
+export const FILENAME_TO_LANGUAGE: Record<string, string> = {
   Dockerfile: 'dockerfile', dockerfile: 'dockerfile', Containerfile: 'dockerfile',
 };
 
-const DEFAULT_EXCLUDES = [
+export const DEFAULT_EXCLUDES = [
   'node_modules', '.git', 'dist', 'build', 'out', 'coverage',
   '.next', '.nuxt', 'vendor', '__pycache__', 'target',
+  '.venv', 'venv', 'bower_components', '.terraform',
 ];
 
 export interface RunScanOptions {
@@ -72,9 +75,56 @@ export interface RunScanResult {
   totalIssues: number;
 }
 
+/**
+ * Convert a glob pattern (`*`, `**`, `?`) to a RegExp over forward-slash
+ * paths. A pattern without a `/` matches against the basename, so
+ * `--include *.proto` finds .proto files at any depth.
+ */
+function globToRegExp(glob: string): { rx: RegExp; basenameOnly: boolean } {
+  const basenameOnly = !glob.includes('/');
+  let out = '';
+  for (let i = 0; i < glob.length; i++) {
+    const ch = glob[i];
+    if (ch === '*') {
+      if (glob[i + 1] === '*') {
+        out += '.*';
+        i++;
+        if (glob[i + 1] === '/') { i++; }
+      } else {
+        out += '[^/]*';
+      }
+    } else if (ch === '?') {
+      out += '[^/]';
+    } else {
+      out += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    }
+  }
+  return { rx: new RegExp(`^${out}$`), basenameOnly };
+}
+
+/**
+ * Build a matcher for `--include` tokens. Tokens containing glob
+ * metacharacters are treated as globs; plain tokens keep the historical
+ * substring behaviour.
+ */
+export function buildIncludeMatcher(tokens: string[]): (fullPath: string) => boolean {
+  const matchers = tokens.map(tok => {
+    if (!/[*?]/.test(tok)) {
+      return (p: string) => p.includes(tok);
+    }
+    const { rx, basenameOnly } = globToRegExp(tok);
+    return (p: string) => {
+      const normalized = p.replace(/\\/g, '/');
+      return rx.test(basenameOnly ? path.posix.basename(normalized) : normalized);
+    };
+  });
+  return (fullPath: string) => matchers.some(m => m(fullPath));
+}
+
 export function walkFiles(root: string, excludes: string[] = [], extraIncludes: string[] = []): string[] {
   const found: string[] = [];
   const skipSet = new Set(DEFAULT_EXCLUDES.concat(excludes));
+  const includeMatcher = extraIncludes.length > 0 ? buildIncludeMatcher(extraIncludes) : null;
 
   const stack: string[] = [root];
   while (stack.length > 0) {
@@ -98,7 +148,7 @@ export function walkFiles(root: string, excludes: string[] = [], extraIncludes: 
       const ext = path.extname(ent.name).slice(1).toLowerCase();
       const includedByExt = DEFAULT_EXTENSIONS.has(ext);
       const includedByName = DEFAULT_FILENAMES.has(ent.name);
-      const includedByFlag = extraIncludes.some(tok => full.includes(tok));
+      const includedByFlag = includeMatcher !== null && includeMatcher(full);
       if (!includedByExt && !includedByName && !includedByFlag) { continue; }
       found.push(full);
     }
@@ -113,7 +163,104 @@ export function resolveLanguage(filePath: string): string {
   return EXT_TO_LANGUAGE[ext] || ext;
 }
 
-export function scanFile(filePath: string, text: string, rules: SecurityRule[], runTaint: boolean = true): SecurityIssue[] {
+export type ConfidenceLevel = 'critical' | 'safe' | 'verify-needed';
+
+/** Collector for workspace-level advisories, deduped by rule code. */
+export interface AdvisorySink {
+  fired: Set<string>;
+  advisories: ProjectAdvisory[];
+}
+
+export interface ScanFileOptions {
+  /** Run the intra-file taint pass (default true). */
+  runTaint?: boolean;
+  /**
+   * Confidence classifier for a confirmed match. Defaults to the static
+   * `classifyConfidence` heuristic; the extension passes its adaptive
+   * (learning-based) engine here.
+   */
+  classify?: (
+    lines: string[], lineNum: number, column: number,
+    matchText: string, ruleCode: string
+  ) => ConfidenceLevel | undefined;
+  /**
+   * Extra suppression check for a confirmed match (the extension wires the
+   * learned safe-pattern profile in here). Return true to drop the match.
+   */
+  isLineSuppressed?: (
+    ruleCode: string, line: string, lines: string[], lineNum: number
+  ) => boolean;
+  /**
+   * When set, ProjectAdvisory rules are evaluated in the SAME pass and
+   * appended here (deduped by code via `fired`), instead of requiring a
+   * second full scan of the file.
+   */
+  advisorySink?: AdvisorySink;
+}
+
+/**
+ * Per-rule data that is invariant across files: lower-cased string patterns
+ * for case-insensitive matching. Computed once per rule (WeakMap-cached)
+ * instead of on every line of every file.
+ */
+interface PreparedStrings {
+  patterns: (string | undefined)[];
+  negatives: (string | undefined)[];
+}
+
+const preparedStringsCache = new WeakMap<SecurityRule, PreparedStrings>();
+
+function prepareStrings(rule: SecurityRule): PreparedStrings {
+  let prepared = preparedStringsCache.get(rule);
+  if (!prepared) {
+    prepared = {
+      patterns: rule.patterns.map(p => typeof p === 'string' ? p.toLowerCase() : undefined),
+      negatives: (rule.negativePatterns || []).map(p => typeof p === 'string' ? p.toLowerCase() : undefined),
+    };
+    preparedStringsCache.set(rule, prepared);
+  }
+  return prepared;
+}
+
+/** A rule plus its per-file precomputed state (path filters already applied). */
+interface ActiveRule {
+  rule: SecurityRule;
+  strings: PreparedStrings;
+  reduceToInfo: boolean;
+}
+
+/**
+ * Apply the file-level filters (ruleType, filePatterns) ONCE per file
+ * instead of once per line × rule — on a 1,000-line file this removes
+ * hundreds of thousands of redundant path-regex evaluations.
+ */
+function selectActiveRules(filePath: string, rules: SecurityRule[]): ActiveRule[] {
+  const active: ActiveRule[] = [];
+  for (const rule of rules) {
+    if (rule.ruleType === RuleType.ProjectAdvisory) { continue; }
+    if (rule.filePatterns) {
+      if (rule.filePatterns.include && !rule.filePatterns.include.some(p => p.test(filePath))) { continue; }
+      if (rule.filePatterns.exclude && rule.filePatterns.exclude.some(p => p.test(filePath))) { continue; }
+    }
+    active.push({
+      rule,
+      strings: prepareStrings(rule),
+      reduceToInfo: !!rule.filePatterns?.reduceSeverityIn?.some(p => p.test(filePath)),
+    });
+  }
+  return active;
+}
+
+export function scanFile(
+  filePath: string,
+  text: string,
+  rules: SecurityRule[],
+  optionsOrRunTaint: ScanFileOptions | boolean = {}
+): SecurityIssue[] {
+  const options: ScanFileOptions =
+    typeof optionsOrRunTaint === 'boolean' ? { runTaint: optionsOrRunTaint } : optionsOrRunTaint;
+  const classify = options.classify || classifyConfidence;
+
   const lines = text.split('\n');
   const issues: SecurityIssue[] = [];
   const lineStates = buildLineStates(text);
@@ -121,29 +268,29 @@ export function scanFile(filePath: string, text: string, rules: SecurityRule[], 
   const informationalCandidates = new Map<string, SecurityIssue[]>();
   const deadline = Date.now() + 3000;
 
+  const activeRules = selectActiveRules(filePath, rules);
+  const advisoryRules = options.advisorySink
+    ? rules.filter(r => r.ruleType === RuleType.ProjectAdvisory)
+    : [];
+
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {
     if (lineNum % 25 === 0 && lineNum > 0 && Date.now() > deadline) { break; }
     const line = lines[lineNum];
     if (line.length > 2000) { continue; }
     const lineLower = line.toLowerCase();
 
-    for (const rule of rules) {
-      if (rule.ruleType === RuleType.ProjectAdvisory) { continue; }
+    for (const { rule, strings, reduceToInfo } of activeRules) {
       if (rule.ruleType === RuleType.Informational && informationalFired.has(rule.code)) {
         const existing = informationalCandidates.get(rule.code);
         if (existing && existing.length >= 10) { continue; }
       }
 
-      if (rule.filePatterns) {
-        if (rule.filePatterns.include && !rule.filePatterns.include.some(p => p.test(filePath))) { continue; }
-        if (rule.filePatterns.exclude && rule.filePatterns.exclude.some(p => p.test(filePath))) { continue; }
-      }
-
-      for (const pattern of rule.patterns) {
+      for (let p = 0; p < rule.patterns.length; p++) {
+        const pattern = rule.patterns[p];
         let matched = false, column = 0, matchText = '';
         try {
           if (typeof pattern === 'string') {
-            const pLower = pattern.toLowerCase();
+            const pLower = strings.patterns[p]!;
             if (lineLower.includes(pLower)) {
               matched = true;
               column = lineLower.indexOf(pLower);
@@ -160,14 +307,17 @@ export function scanFile(filePath: string, text: string, rules: SecurityRule[], 
 
         if (rule.contextAware) {
           const ls = lineStates[lineNum];
-          if (isInsideComment(line, column, ls) || isInsideStringContent(line, column, ls)) { continue; }
+          if (isInsideComment(line, column, ls) ||
+              isInsideStringContent(line, column, ls) ||
+              isInsideJSXText(line, column)) { continue; }
         }
 
         if (rule.negativePatterns) {
           let negated = false;
-          for (const neg of rule.negativePatterns) {
+          for (let n = 0; n < rule.negativePatterns.length; n++) {
+            const neg = rule.negativePatterns[n];
             if (typeof neg === 'string') {
-              if (lineLower.includes(neg.toLowerCase())) { negated = true; break; }
+              if (lineLower.includes(strings.negatives[n]!)) { negated = true; break; }
             } else if (neg instanceof RegExp) {
               if (neg.test(line)) { negated = true; break; }
             }
@@ -177,8 +327,9 @@ export function scanFile(filePath: string, text: string, rules: SecurityRule[], 
 
         if (rule.suppressIfNearby) {
           let suppressed = false;
-          const s = Math.max(0, lineNum - 3);
-          const e = Math.min(lines.length - 1, lineNum + 3);
+          const window = rule.suppressNearbyWindow ?? 3;
+          const s = Math.max(0, lineNum - window);
+          const e = Math.min(lines.length - 1, lineNum + window);
           for (let j = s; j <= e && !suppressed; j++) {
             for (const sp of rule.suppressIfNearby) {
               if (sp.test(lines[j])) { suppressed = true; break; }
@@ -187,20 +338,20 @@ export function scanFile(filePath: string, text: string, rules: SecurityRule[], 
           if (suppressed) { continue; }
         }
 
-        let effectiveSev = rule.severity;
-        if (rule.filePatterns?.reduceSeverityIn && rule.filePatterns.reduceSeverityIn.some(p => p.test(filePath))) {
-          effectiveSev = SecuritySeverity.Info;
+        if (options.isLineSuppressed && options.isLineSuppressed(rule.code, line, lines, lineNum)) {
+          continue;
         }
 
         const issue: SecurityIssue = {
           line: lineNum,
           column,
           message: rule.message,
-          severity: effectiveSev,
+          severity: reduceToInfo ? SecuritySeverity.Info : rule.severity,
           suggestion: rule.suggestion,
           code: rule.code,
           pattern: matchText,
           category: rule.category,
+          confidenceLevel: classify(lines, lineNum, column, matchText, rule.code),
         };
 
         if (rule.ruleType === RuleType.Informational) {
@@ -215,9 +366,38 @@ export function scanFile(filePath: string, text: string, rules: SecurityRule[], 
         break;
       }
     }
+
+    // Same-pass project advisory collection (workspace-level, fire-once).
+    if (options.advisorySink && advisoryRules.length > options.advisorySink.fired.size) {
+      const sink = options.advisorySink;
+      for (const rule of advisoryRules) {
+        if (sink.fired.has(rule.code)) { continue; }
+        const strings = prepareStrings(rule);
+        for (let p = 0; p < rule.patterns.length; p++) {
+          const pattern = rule.patterns[p];
+          let matched = false;
+          if (typeof pattern === 'string') {
+            if (lineLower.includes(strings.patterns[p]!)) { matched = true; }
+          } else if (pattern instanceof RegExp) {
+            if (pattern.test(line)) { matched = true; }
+          }
+          if (matched) {
+            sink.fired.add(rule.code);
+            sink.advisories.push({
+              code: rule.code,
+              message: rule.message,
+              suggestion: rule.suggestion,
+              category: rule.category,
+              triggeredBy: filePath,
+            });
+            break;
+          }
+        }
+      }
+    }
   }
 
-  if (runTaint) {
+  if (options.runTaint !== false) {
     try {
       const taintFindings = runTaintAnalysis(text, 100);
       for (const t of taintFindings) { issues.push(t); }
@@ -232,7 +412,7 @@ export function scanFile(filePath: string, text: string, rules: SecurityRule[], 
   return issues;
 }
 
-function pickBestInformationalCandidate(candidates: SecurityIssue[], lines: string[]): SecurityIssue {
+export function pickBestInformationalCandidate(candidates: SecurityIssue[], lines: string[]): SecurityIssue {
   if (candidates.length === 1) { return candidates[0]; }
   const DECL = /^\s*(?:import\s|export\s(?:type|interface|default)|const\s|let\s|var\s|type\s|interface\s|class\s)/;
   const FN_BODY = /(?:function\s|=>\s*\{|\.(?:then|catch|map|forEach|filter|reduce)\s*\()/;

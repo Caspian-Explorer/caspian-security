@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { SecurityIssue, SecuritySeverity, SecurityCategory, CATEGORY_LABELS, SEVERITY_LABELS, ProjectAdvisory } from './types';
+import { SecurityIssue, CATEGORY_LABELS, SEVERITY_LABELS, ProjectAdvisory } from './types';
+import { buildSARIF, resolveToolVersion } from './sarif';
 
 export interface FileSecurityResult {
   filePath: string;
@@ -186,90 +187,7 @@ export class ResultsStore implements vscode.Disposable {
   }
 
   toSARIF(): string {
-    const allResults = this.getAllResults();
-
-    // Collect unique rules for the tool.driver.rules array
-    const rulesMap = new Map<string, { id: string; category: string; message: string; suggestion: string }>();
-    const sarifResults: any[] = [];
-
-    for (const result of allResults) {
-      for (const issue of result.issues) {
-        // Track unique rules
-        if (!rulesMap.has(issue.code)) {
-          rulesMap.set(issue.code, {
-            id: issue.code,
-            category: CATEGORY_LABELS[issue.category] || issue.category,
-            message: issue.message,
-            suggestion: issue.suggestion,
-          });
-        }
-
-        // Map severity to SARIF level
-        let level: string;
-        switch (issue.severity) {
-          case SecuritySeverity.Error: level = 'error'; break;
-          case SecuritySeverity.Warning: level = 'warning'; break;
-          default: level = 'note'; break;
-        }
-
-        sarifResults.push({
-          ruleId: issue.code,
-          ruleIndex: Array.from(rulesMap.keys()).indexOf(issue.code),
-          level,
-          message: {
-            text: `${issue.message}\n\nSuggestion: ${issue.suggestion}`,
-          },
-          locations: [
-            {
-              physicalLocation: {
-                artifactLocation: {
-                  uri: result.relativePath.replace(/\\/g, '/'),
-                  uriBaseId: '%SRCROOT%',
-                },
-                region: {
-                  startLine: issue.line + 1,
-                  startColumn: issue.column + 1,
-                },
-              },
-            },
-          ],
-        });
-      }
-    }
-
-    // Build tool.driver.rules
-    const sarifRules = Array.from(rulesMap.values()).map(rule => ({
-      id: rule.id,
-      shortDescription: {
-        text: rule.message,
-      },
-      fullDescription: {
-        text: rule.suggestion,
-      },
-      properties: {
-        category: rule.category,
-      },
-    }));
-
-    const sarif = {
-      $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json',
-      version: '2.1.0' as const,
-      runs: [
-        {
-          tool: {
-            driver: {
-              name: 'Caspian Security',
-              version: '7.0.0',
-              informationUri: 'https://marketplace.visualstudio.com/items?itemName=CaspianTools.caspian-security',
-              rules: sarifRules,
-            },
-          },
-          results: sarifResults,
-        },
-      ],
-    };
-
-    return JSON.stringify(sarif, null, 2);
+    return buildSARIF(this.getAllResults(), resolveToolVersion());
   }
 
   toFormattedText(): string {

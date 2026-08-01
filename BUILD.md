@@ -84,7 +84,7 @@ caspian-security/
 │   ├── caspianIgnore.ts        # .caspianignore file parsing (~80 lines)
 │   ├── dependencyChecker.ts    # npm outdated/audit + stack checking (~200 lines)
 │   ├── types.ts                # TypeScript type definitions
-│   ├── rules/                  # 14 category rule files (~1200 lines total)
+│   ├── rules/                  # 29 category rule files
 │   │   ├── index.ts            # Rule registry -- imports and merges all categories
 │   │   ├── authRules.ts        # AUTH001--AUTH007
 │   │   ├── inputValidationRules.ts  # XSS001--XSS011
