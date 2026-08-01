@@ -26,7 +26,9 @@ const DOCKERFILE_ONLY = {
   include: [/(^|[\\/])(?:Dockerfile|Containerfile|dockerfile)(?:\..*)?$/i, /\.dockerfile$/i],
 };
 
-export const dockerfileRules: SecurityRule[] = [
+// Exact-config-key matches are rarely accidental: CodeDetectable rules in
+// this family carry base confidence 'critical'.
+export const dockerfileRules: SecurityRule[] = ([
   {
     code: 'DOCKER001',
     message: 'Base image uses the mutable `latest` tag or no tag — build is not reproducible',
@@ -161,4 +163,6 @@ export const dockerfileRules: SecurityRule[] = [
     category: cat,
     ruleType,
   },
-];
+] as SecurityRule[]).map(rule =>
+  rule.ruleType === RuleType.CodeDetectable ? { ...rule, confidence: 'critical' as const } : rule
+);

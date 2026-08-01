@@ -13,4 +13,15 @@ module.exports = {
       tsconfig: 'tsconfig.json',
     }],
   },
+  // Coverage ratchet: thresholds sit a few points below the measured
+  // baseline (10.9.0: ~64% statements / 56% branches on touched files).
+  // Raise them as coverage grows — never lower them to make a build pass.
+  coverageThreshold: {
+    global: {
+      statements: 60,
+      branches: 52,
+      functions: 58,
+      lines: 60,
+    },
+  },
 };

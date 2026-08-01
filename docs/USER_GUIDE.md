@@ -255,7 +255,7 @@ A selection of the most-used commands (44 total):
 
 ### One-click quick-fix lightbulb
 
-Hover a finding and press `Ctrl+.` (or click the yellow lightbulb) for a deterministic one-click fix on the 13 most common mechanical remediations (e.g. Kubernetes `privileged: true → false`, Terraform `publicly_accessible = false`, adding `algorithms: ['RS256']` to `jwt.verify`). No AI round-trip; fully undoable.
+Hover a finding and press `Ctrl+.` (or click the yellow lightbulb) for a deterministic one-click fix on the 18 most common mechanical remediations (e.g. Kubernetes `privileged: true → false`, Terraform `publicly_accessible = false`, weak hashes `md5/sha1 → sha256`, `http:// → https://`, Dockerfile `ADD → COPY`, adding `algorithms: ['RS256']` to `jwt.verify`). No AI round-trip; fully undoable.
 
 ### AI fixes
 

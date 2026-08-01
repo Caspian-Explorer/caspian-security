@@ -274,7 +274,7 @@ caspian scan . --baseline .caspian-baseline.json --fail-on error</code></pre>
     <tr><td>Caspian Security: Show Learning Dashboard</td><td>Rule effectiveness, hot zones, trends</td></tr>
   </table>
   <h3>One-click quick-fix lightbulb</h3>
-  <p>Hover a finding, press <code>Ctrl+.</code> (or click the lightbulb) for a deterministic one-click fix on the 13 most common mechanical remediations (e.g. Kubernetes <code>privileged: true → false</code>, Terraform <code>publicly_accessible = false</code>, <code>algorithms: ['RS256']</code> on <code>jwt.verify</code>). No AI round-trip; fully undoable.</p>
+  <p>Hover a finding, press <code>Ctrl+.</code> (or click the lightbulb) for a deterministic one-click fix on the 18 most common mechanical remediations (e.g. Kubernetes <code>privileged: true → false</code>, Terraform <code>publicly_accessible = false</code>, weak hashes <code>md5/sha1 → sha256</code>, Dockerfile <code>ADD → COPY</code>, <code>algorithms: ['RS256']</code> on <code>jwt.verify</code>). No AI round-trip; fully undoable.</p>
   <h3>AI fixes</h3>
   <p>For ambiguous cases, <strong>Fix Issue with AI</strong> sends the enclosing function (minimal-context by default) to your provider (Claude / GPT-4 / Gemini), shows a diff, and applies on confirmation. API keys live in VS Code SecretStorage, never in settings.</p>
 

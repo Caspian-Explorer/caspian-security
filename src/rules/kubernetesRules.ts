@@ -37,7 +37,9 @@ const REQUIRE_K8S_MARKERS: RegExp[] = [
  * manifests. Acceptable FP rate given the specificity of K8s keywords.
  */
 
-export const kubernetesRules: SecurityRule[] = [
+// Exact-config-key matches are rarely accidental: CodeDetectable rules in
+// this family carry base confidence 'critical'.
+export const kubernetesRules: SecurityRule[] = ([
   {
     code: 'K8S001',
     message: 'Pod / container runs with `privileged: true` — equivalent to root on the host',
@@ -162,4 +164,6 @@ export const kubernetesRules: SecurityRule[] = [
     category: cat,
     ruleType,
   },
-];
+] as SecurityRule[]).map(rule =>
+  rule.ruleType === RuleType.CodeDetectable ? { ...rule, confidence: 'critical' as const } : rule
+);

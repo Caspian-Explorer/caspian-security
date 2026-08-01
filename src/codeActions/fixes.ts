@@ -246,6 +246,87 @@ const fixCorsWildcard: FixFn = (doc, line) => {
   return null;
 };
 
+const fixWeakHash: FixFn = (doc, line) => {
+  const text = doc.lineAt(line).text;
+  // Node: createHash('md5') / createHash("sha1") → sha256.
+  const nodeMatch = /createHash\s*\(\s*['"](md5|sha1)['"]/.exec(text);
+  if (nodeMatch) {
+    return replaceOnLine(
+      doc, line,
+      new RegExp(`(?<=createHash\\s*\\(\\s*['"])${nodeMatch[1]}(?=['"])`),
+      'sha256',
+      `Replace ${nodeMatch[1]} with sha256`,
+    );
+  }
+  // Python: hashlib.md5( / hashlib.sha1( → hashlib.sha256(.
+  const pyMatch = /hashlib\.(md5|sha1)\s*\(/.exec(text);
+  if (pyMatch) {
+    return replaceOnLine(
+      doc, line,
+      new RegExp(`hashlib\\.${pyMatch[1]}\\s*\\(`),
+      'hashlib.sha256(',
+      `Replace hashlib.${pyMatch[1]} with hashlib.sha256`,
+    );
+  }
+  return null;
+};
+
+const fixHttpUrl: FixFn = (doc, line) => {
+  const text = doc.lineAt(line).text;
+  // Mirror ENC003's own guards: never touch localhost / loopback URLs.
+  const m = /['"]http:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0)/.exec(text);
+  if (!m) { return null; }
+  return {
+    edits: [{
+      startLine: line, startCol: m.index + 1,
+      endLine: line, endCol: m.index + 1 + 'http://'.length,
+      newText: 'https://',
+    }],
+    title: 'Change http:// to https://',
+    preferred: true,
+  };
+};
+
+const fixTerraformPublicAccessBlock: FixFn = (doc, line) => {
+  const text = doc.lineAt(line).text;
+  const m = /\b(block_public_acls|block_public_policy|ignore_public_acls|restrict_public_buckets)\s*=\s*false/.exec(text);
+  if (m) {
+    return replaceOnLine(
+      doc, line,
+      new RegExp(`\\b${m[1]}\\s*=\\s*false`),
+      `${m[1]} = true`,
+      `Set ${m[1]} = true`,
+    );
+  }
+  return null;
+};
+
+const fixDockerfileAddToCopy: FixFn = (doc, line) => {
+  const text = doc.lineAt(line).text;
+  // Only the local-path form (the DOCKER005 pattern already excludes URLs
+  // and flag forms, but re-check here to stay safe when invoked directly).
+  if (!/^\s*ADD\s+(?!https?:\/\/|--)/i.test(text)) { return null; }
+  return replaceOnLine(doc, line, /ADD\b/i, 'COPY', 'Replace ADD with COPY');
+};
+
+const fixDockerfilePackageInstall: FixFn = (doc, line) => {
+  const text = doc.lineAt(line).text;
+  const apt = /^(\s*RUN\s+apt-get\s+install)\b(?!.*--no-install-recommends)/i.exec(text);
+  if (apt) {
+    return replaceOnLine(
+      doc, line,
+      /apt-get\s+install\b/i,
+      'apt-get install --no-install-recommends',
+      'Add --no-install-recommends',
+    );
+  }
+  const apk = /^(\s*RUN\s+apk\s+add)\b(?!.*--no-cache)/i.exec(text);
+  if (apk) {
+    return replaceOnLine(doc, line, /apk\s+add\b/i, 'apk add --no-cache', 'Add --no-cache');
+  }
+  return null;
+};
+
 // --- Registry -------------------------------------------------------------
 
 export const FIX_REGISTRY: Record<string, FixFn> = {
@@ -256,7 +337,8 @@ export const FIX_REGISTRY: Record<string, FixFn> = {
   K8S004: fixKubernetesRootOrPrivEsc,
 
   // Terraform
-  TF002: fixTerraformPublicAcl,
+  TF002: (doc, line, col) =>
+    fixTerraformPublicAcl(doc, line, col) ?? fixTerraformPublicAccessBlock(doc, line, col),
   TF004: fixTerraformPublicAccess,
 
   // JWT
@@ -268,9 +350,13 @@ export const FIX_REGISTRY: Record<string, FixFn> = {
   DESER004: fixYamlLoad,
 
   // Encryption
+  ENC001: fixWeakHash,
+  ENC003: fixHttpUrl,
   ENC004: fixRejectUnauthorized,
 
   // Dockerfile
+  DOCKER005: fixDockerfileAddToCopy,
+  DOCKER006: fixDockerfilePackageInstall,
   DOCKER008: fixDockerfileHealthcheckNone,
 
   // CORS

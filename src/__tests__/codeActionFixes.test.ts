@@ -179,3 +179,73 @@ describe('resolveFix — safety net', () => {
     expect(resolveFix('K8S001', doc, -1, 0)).toBeNull();
   });
 });
+
+describe('resolveFix — 10.9 additions', () => {
+  it('ENC001: createHash md5 → sha256', () => {
+    const lines = ["const h = crypto.createHash('md5').update(data).digest('hex');"];
+    const fix = resolveFix('ENC001', docOf(lines), 0, 10)!;
+    expect(applyFix(lines, fix)[0]).toBe("const h = crypto.createHash('sha256').update(data).digest('hex');");
+  });
+
+  it('ENC001: hashlib.sha1 → hashlib.sha256', () => {
+    const lines = ['digest = hashlib.sha1(payload).hexdigest()'];
+    const fix = resolveFix('ENC001', docOf(lines), 0, 9)!;
+    expect(applyFix(lines, fix)[0]).toBe('digest = hashlib.sha256(payload).hexdigest()');
+  });
+
+  it('ENC001: returns null for algorithms it does not handle', () => {
+    const lines = ["const h = crypto.createHash('sha256');"];
+    expect(resolveFix('ENC001', docOf(lines), 0, 10)).toBeNull();
+  });
+
+  it('ENC003: http:// → https:// for external URLs', () => {
+    const lines = ["const api = 'http://api.example-service.com/v1';"];
+    const fix = resolveFix('ENC003', docOf(lines), 0, 12)!;
+    expect(applyFix(lines, fix)[0]).toBe("const api = 'https://api.example-service.com/v1';");
+  });
+
+  it('ENC003: leaves localhost URLs alone', () => {
+    const lines = ["const api = 'http://localhost:3000';"];
+    expect(resolveFix('ENC003', docOf(lines), 0, 12)).toBeNull();
+  });
+
+  it('TF002: flips block_public_acls = false to true', () => {
+    const lines = ['  block_public_acls       = false'];
+    const fix = resolveFix('TF002', docOf(lines), 0, 2)!;
+    expect(applyFix(lines, fix)[0]).toBe('  block_public_acls = true');
+  });
+
+  it('TF002: still fixes the ACL literal form', () => {
+    const lines = ['  acl = "public-read"'];
+    const fix = resolveFix('TF002', docOf(lines), 0, 2)!;
+    expect(applyFix(lines, fix)[0]).toBe('  acl = "private"');
+  });
+
+  it('DOCKER005: ADD with local path → COPY', () => {
+    const lines = ['ADD ./app /opt/app'];
+    const fix = resolveFix('DOCKER005', docOf(lines), 0, 0)!;
+    expect(applyFix(lines, fix)[0]).toBe('COPY ./app /opt/app');
+  });
+
+  it('DOCKER005: never rewrites ADD with a URL', () => {
+    const lines = ['ADD https://example.com/pkg.tar.gz /tmp/'];
+    expect(resolveFix('DOCKER005', docOf(lines), 0, 0)).toBeNull();
+  });
+
+  it('DOCKER006: apt-get install gains --no-install-recommends', () => {
+    const lines = ['RUN apt-get install -y curl'];
+    const fix = resolveFix('DOCKER006', docOf(lines), 0, 0)!;
+    expect(applyFix(lines, fix)[0]).toBe('RUN apt-get install --no-install-recommends -y curl');
+  });
+
+  it('DOCKER006: apk add gains --no-cache', () => {
+    const lines = ['RUN apk add curl'];
+    const fix = resolveFix('DOCKER006', docOf(lines), 0, 0)!;
+    expect(applyFix(lines, fix)[0]).toBe('RUN apk add --no-cache curl');
+  });
+
+  it('DOCKER006: leaves already-hardened installs alone', () => {
+    const lines = ['RUN apt-get install --no-install-recommends -y curl'];
+    expect(resolveFix('DOCKER006', docOf(lines), 0, 0)).toBeNull();
+  });
+});

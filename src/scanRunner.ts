@@ -210,6 +210,15 @@ interface PreparedStrings {
 
 const preparedStringsCache = new WeakMap<SecurityRule, PreparedStrings>();
 
+/**
+ * Default base confidence when neither the per-match heuristics nor the
+ * rule author decided: a code-detectable match warrants human review;
+ * an informational reminder is low-priority by nature.
+ */
+function defaultConfidence(rule: SecurityRule): ConfidenceLevel {
+  return rule.ruleType === RuleType.Informational ? 'safe' : 'verify-needed';
+}
+
 function prepareStrings(rule: SecurityRule): PreparedStrings {
   let prepared = preparedStringsCache.get(rule);
   if (!prepared) {
@@ -342,6 +351,14 @@ export function scanFile(
           continue;
         }
 
+        // Confidence resolution order: per-match heuristics (or the
+        // extension's adaptive engine) → rule author's base confidence →
+        // default by rule type. Every finding ends up with a level.
+        const confidenceLevel =
+          classify(lines, lineNum, column, matchText, rule.code)
+          ?? rule.confidence
+          ?? defaultConfidence(rule);
+
         const issue: SecurityIssue = {
           line: lineNum,
           column,
@@ -351,7 +368,7 @@ export function scanFile(
           code: rule.code,
           pattern: matchText,
           category: rule.category,
-          confidenceLevel: classify(lines, lineNum, column, matchText, rule.code),
+          confidenceLevel,
         };
 
         if (rule.ruleType === RuleType.Informational) {

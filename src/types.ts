@@ -44,6 +44,14 @@ export interface SecurityRule {
    * window because the suppressing line is legitimately far away.
    */
   suppressNearbyWindow?: number;
+  /**
+   * Author-declared base confidence for matches of this rule, used when the
+   * per-match heuristics can't decide. Set 'critical' only on rules whose
+   * pattern is essentially never accidental (provider-prefixed tokens,
+   * exact IaC config keys). Rules without it fall back to a default by
+   * ruleType: CodeDetectable → 'verify-needed', Informational → 'safe'.
+   */
+  confidence?: 'critical' | 'safe' | 'verify-needed';
   filePatterns?: {
     include?: RegExp[];
     exclude?: RegExp[];

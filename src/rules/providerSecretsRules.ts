@@ -33,7 +33,10 @@ const baseSuggestion =
   'scrub it from git history, and load the replacement from an environment variable, ' +
   'secrets manager, or OS keychain. Never commit provider tokens to source.';
 
-export const providerSecretsRules: SecurityRule[] = [
+// Every TOKEN pattern matches a provider-issued token shape that is almost
+// never accidental (see rationale above), so all rules in this family carry
+// base confidence 'critical'.
+export const providerSecretsRules: SecurityRule[] = ([
   {
     code: 'TOKEN001',
     message: 'Slack workspace / app token detected (xoxb, xoxp, xoxa, xoxs, xapp)',
@@ -380,4 +383,4 @@ export const providerSecretsRules: SecurityRule[] = [
     category: cat,
     ruleType,
   },
-];
+] as SecurityRule[]).map(rule => ({ ...rule, confidence: 'critical' as const }));

@@ -108,8 +108,8 @@ Findings land in the GitHub Security tab automatically. The npm CLI and the exte
 
 ## Key Capabilities
 
-- **One-click quick-fix lightbulb** -- 13 mechanical remediations (Kubernetes `privileged: true→false`, Terraform `publicly_accessible = false`, `jwt.verify` gets `algorithms: ['RS256']`, `yaml.unsafe_load → safe_load`, etc.) applied instantly via Ctrl+. No AI round-trip, fully reversible with undo
-- **Context-aware analysis** -- classifies issues by variable source (hardcoded, static, or dynamic) with confidence badges
+- **One-click quick-fix lightbulb** -- 18 mechanical remediations (Kubernetes `privileged: true→false`, Terraform public-access flags, `jwt.verify` gets `algorithms: ['RS256']`, `yaml.unsafe_load → safe_load`, `md5/sha1 → sha256`, `http:// → https://`, Dockerfile `ADD → COPY` and hardened package installs, etc.) applied instantly via Ctrl+. No AI round-trip, fully reversible with undo
+- **Context-aware analysis** -- every finding carries a confidence badge (Critical / Verify needed / Likely safe), resolved from variable-source heuristics, per-rule base confidence (provider tokens and exact IaC keys are Critical), and learned behavior
 - **AI fixes with function-level understanding** -- sends the entire enclosing function and traced variable definitions to the AI, not just 20 lines of context
 - **299 security rules** across 14 categories with actionable fix suggestions
 - **Real-time analysis** -- checks code as you type with a 1-second debounce to avoid lag
@@ -280,19 +280,20 @@ If minimal context isn't enough — e.g., the fix needs awareness of code furthe
 
 ## Confidence Scoring
 
-Each detected issue is analyzed for a **confidence level** based on lightweight variable-source heuristics:
+**Every finding carries a confidence level.** It is resolved in three steps: per-match variable-source heuristics first, then the rule's own base confidence (provider-prefix tokens and exact infrastructure config keys are inherently Critical), then a default by rule type (code detections → Verify Needed, informational reminders → Safe).
 
 | Level | Badge | Meaning | Example |
 |-------|-------|---------|---------|
-| Critical | Red | Hardcoded secret as a string literal | `const password = "EXAMPLE_PASSWORD"` |
-| Safe | Green | Static string with no dynamic input | `const query = "SELECT * FROM users"` |
-| Verify Needed | Orange | Dynamic value via concatenation or interpolation | `const query = "SELECT * FROM " + userInput` |
+| Critical | Red | Near-certain real issue | `const password = "EXAMPLE_PASSWORD"`, a Slack `xoxb-…` token, `privileged: true` |
+| Safe | Green | Likely fine / low priority | parameterized query, informational reminders |
+| Verify Needed | Orange | Needs human judgement | `const query = "SELECT * FROM " + userInput` |
 
 Confidence badges appear:
 - In the **Results Panel** next to the Verify button
 - In **VS Code diagnostics** as a prefix (e.g., `[Critical] [Secrets] CRED001: ...`)
+- In CLI `--format json` output as the `confidence` field
 
-Confidence is only shown when the heuristic is confident in its classification. Issues without a clear signal show no badge.
+The adaptive learning engine then shifts levels over time — rules you repeatedly dismiss as false positives get downgraded; rules whose findings you consistently fix get upgraded.
 
 ---
 

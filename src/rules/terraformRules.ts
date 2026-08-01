@@ -20,7 +20,9 @@ const TERRAFORM_ONLY = {
   include: [/\.tf(vars)?$/i, /\.hcl$/i],
 };
 
-export const terraformRules: SecurityRule[] = [
+// Exact-config-key matches are rarely accidental: CodeDetectable rules in
+// this family carry base confidence 'critical'.
+export const terraformRules: SecurityRule[] = ([
   {
     code: 'TF001',
     message: 'Security group allows ingress from 0.0.0.0/0 — exposed to the entire internet',
@@ -199,4 +201,6 @@ export const terraformRules: SecurityRule[] = [
     category: cat,
     ruleType,
   },
-];
+] as SecurityRule[]).map(rule =>
+  rule.ruleType === RuleType.CodeDetectable ? { ...rule, confidence: 'critical' as const } : rule
+);

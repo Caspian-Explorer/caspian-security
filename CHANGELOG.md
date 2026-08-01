@@ -4,6 +4,22 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [10.9.0] - 2026-08-01
+
+Phase B of the trust roadmap: every finding now carries a confidence rating (previously ~2 of 291 rules produced one on a fresh install), five new one-click fixes (13 → 18), CI now tests on Windows with a coverage gate, and the results panel stays responsive on scans with tens of thousands of findings.
+
+### Added
+
+- **Confidence on every finding** — confidence now resolves as: per-match variable-source heuristics → the rule's author-declared base confidence (new optional `confidence` field on `SecurityRule`) → a default by rule type (code detections → `verify-needed`, informational reminders → `safe`). All 29 provider-prefix TOKEN rules and every code-detectable Kubernetes/Terraform/Dockerfile rule carry base confidence `critical` — their patterns are essentially never accidental. The CLI's `--format json` exposes it as `confidence`. Covered by a new `confidence.test.ts` suite.
+- **Five new one-click quick fixes** (18 total): `ENC001` weak hash (`createHash('md5'|'sha1') → 'sha256'`, `hashlib.md5/sha1 → hashlib.sha256`), `ENC003` `http:// → https://` (never touches localhost), `TF002` S3 public-access-block flags (`block_public_acls = false → true` and friends), `DOCKER005` `ADD → COPY` for local paths (never URLs), `DOCKER006` `apt-get install` gains `--no-install-recommends` / `apk add` gains `--no-cache`.
+- **CI hardening** — the test matrix now includes `windows-latest` (the codebase has Windows path-normalisation logic that was only ever exercised on Linux) and Node 22, and runs `npm run test:coverage` with a coverage ratchet in `jest.config.js` (60% statements / 52% branches to start — raise as coverage grows, never lower).
+
+### Changed
+
+- **Results panel scales to huge scans** — the findings table renders 500 rows initially with a "Show more" row (rendering everything froze the webview on 10k+ findings), and all row/button clicks go through one delegated listener instead of thousands of per-element listeners re-attached on every refresh.
+
+---
+
 ## [10.8.0] - 2026-08-01
 
 Trust release: fixes a bug that silently reported unchanged files as clean after every VS Code restart, stops learning data from being lost on shutdown, makes the advertised Dockerfile/Terraform/Kubernetes rules actually run inside the editor, and consolidates the three divergent copies of the scan engine into one shared implementation covered by a greatly expanded test suite (1,134 tests, up from 1,046).
