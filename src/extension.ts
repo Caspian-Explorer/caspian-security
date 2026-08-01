@@ -6,6 +6,7 @@ import { DiagnosticsManager } from './diagnosticsManager';
 import { ConfigManager, LANGUAGE_EXTENSIONS, LANGUAGE_FILENAMES } from './configManager';
 import { SecurityCategory, SecuritySeverity, CATEGORY_LABELS } from './types';
 import { AdvisorySink } from './scanRunner';
+import { normaliseLineEndings } from './scanContext';
 import { ResultsStore } from './resultsStore';
 import { StatusBarManager, ScanState } from './statusBarManager';
 import { ResultsPanel } from './resultsPanel';
@@ -457,7 +458,7 @@ function registerCommands(context: vscode.ExtensionContext) {
       const line = diagnostic.range.start.line;
       const column = diagnostic.range.start.character;
       const relativePath = vscode.workspace.asRelativePath(document.uri);
-      const lines = document.getText().split('\n');
+      const lines = normaliseLineEndings(document.getText()).split('\n');
       const pattern = lines[line]?.substring(column, column + (diagnostic.range.end.character - column)) || '';
 
       await executeAIFixFromPanel({
@@ -2027,7 +2028,10 @@ async function executeAIFixFromPanel(
     return;
   }
 
-  const fullContent = document.getText();
+  // CRLF-normalised: the extracted line feeds the AI prompt and the
+  // fix-pattern memory cache key, so a stray '\r' would both pollute the
+  // prompt and stop cached fixes replaying across LF/CRLF files.
+  const fullContent = normaliseLineEndings(document.getText());
   const lines = fullContent.split('\n');
   const originalLine = lines[issueData.line] || '';
 
@@ -2214,7 +2218,7 @@ async function executeAIFixFromPanel(
               // Record successful fix pattern for future reuse
               if (fixPatternMemory || codebaseProfile) {
                 const updatedDoc2 = await vscode.workspace.openTextDocument(uri);
-                const updatedLines = updatedDoc2.getText().split('\n');
+                const updatedLines = normaliseLineEndings(updatedDoc2.getText()).split('\n');
                 const afterLine = updatedLines[issueData.line] || '';
                 if (fixPatternMemory) {
                   fixPatternMemory.recordFix(
