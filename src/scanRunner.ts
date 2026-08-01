@@ -16,7 +16,7 @@ import {
   ProjectAdvisory,
 } from './types';
 import { isGeneratedFile } from './generatedFileDetector';
-import { buildLineStates, isInsideComment, isInsideStringContent, isInsideJSXText } from './scanContext';
+import { buildLineStates, isInsideComment, isInsideStringContent, isInsideJSXText, normaliseLineEndings } from './scanContext';
 import { classifyConfidence } from './confidenceAnalyzer';
 import { runTaintAnalysis } from './taint';
 
@@ -275,6 +275,10 @@ export function scanFile(
   const options: ScanFileOptions =
     typeof optionsOrRunTaint === 'boolean' ? { runTaint: optionsOrRunTaint } : optionsOrRunTaint;
   const classify = options.classify || classifyConfidence;
+
+  // Windows checkouts are CRLF; normalise once here so every downstream
+  // consumer (line split, context states, taint) sees LF-only text.
+  text = normaliseLineEndings(text);
 
   const lines = text.split('\n');
   const issues: SecurityIssue[] = [];

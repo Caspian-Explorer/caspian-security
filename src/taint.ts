@@ -35,6 +35,7 @@ import {
   SecuritySeverity,
   SecurityCategory,
 } from './types';
+import { normaliseLineEndings } from './scanContext';
 
 // ---------------------------------------------------------------------------
 // Sources
@@ -230,7 +231,9 @@ export function runTaintAnalysis(text: string, deadlineMs: number = 100): Securi
   // expensive half on dense files, so it must count against the budget.
   const startedAt = Date.now();
   const deadlineAt = startedAt + deadlineMs;
-  const lines = text.split('\n');
+  // CRLF-safe: a trailing '\r' broke the `$`-anchored assignment patterns
+  // below, which silently dropped taint findings on Windows checkouts.
+  const lines = normaliseLineEndings(text).split('\n');
   const ranges = findFunctionRanges(lines, deadlineAt);
   if (ranges.length === 0) { return []; }
 

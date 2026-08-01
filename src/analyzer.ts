@@ -6,6 +6,7 @@ import { CodebaseProfile } from './codebaseProfile';
 import { isGeneratedFile } from './generatedFileDetector';
 import { ConfigManager } from './configManager';
 import { scanFile, ScanFileOptions, AdvisorySink } from './scanRunner';
+import { normaliseLineEndings } from './scanContext';
 
 export class SecurityAnalyzer {
   private allRules: SecurityRule[];
@@ -80,7 +81,7 @@ export class SecurityAnalyzer {
   ): ProjectAdvisory[] {
     const rules = this.resolveRules(categories);
     const advisories: ProjectAdvisory[] = [];
-    const text = document.getText();
+    const text = normaliseLineEndings(document.getText());
     const lines = text.split('\n');
     const fired = new Set<string>();
 

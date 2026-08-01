@@ -17,6 +17,28 @@
  *   walker.
  */
 
+/**
+ * Normalise CRLF line endings to LF.
+ *
+ * Git on Windows checks files out with CRLF by default (`core.autocrlf`),
+ * and the scan engine splits on `\n` — which left a trailing `\r` on every
+ * line. Any rule pattern anchored to end-of-line (`$`) then failed to
+ * match, so Windows users silently lost findings: the vulnerable corpus
+ * loses TAINT001/003/006/007 and gains a spurious TAINT008 under CRLF.
+ *
+ * Only `\r\n` is rewritten, never a lone `\r`. A CRLF pair is
+ * unambiguously one line break, so the line COUNT and every column offset
+ * are preserved and diagnostics keep pointing at the right place.
+ * Rewriting lone CRs would risk splitting a line that contains a stray
+ * carriage-return byte and shifting every line number after it.
+ *
+ * Cheap no-op for already-LF text — the `includes` guard skips the copy.
+ */
+export function normaliseLineEndings(text: string): string {
+  if (!text.includes('\r')) { return text; }
+  return text.replace(/\r\n/g, '\n');
+}
+
 /** Where a line begins, inherited from the previous line's terminal state. */
 export interface LineState {
   /** Inside a single- or double-quoted string at char 0 of this line. Rare but legal via `\` line-continuation. */
@@ -50,6 +72,7 @@ type ScanState =
  * always a "clean" state (files always start outside any construct).
  */
 export function buildLineStates(text: string): LineState[] {
+  text = normaliseLineEndings(text);
   const lines = text.split('\n');
   const states: LineState[] = new Array(lines.length);
   states[0] = CLEAN_STATE;

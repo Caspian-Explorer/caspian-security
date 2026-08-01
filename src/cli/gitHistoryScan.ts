@@ -299,7 +299,11 @@ async function runGitLog(
       buf += chunk;
       let nl: number;
       while ((nl = buf.indexOf('\n')) !== -1) {
-        const line = buf.substring(0, nl);
+        // Strip the CR of a CRLF pair: diff lines from a Windows checkout
+        // otherwise carry a trailing '\r' that defeats `$`-anchored
+        // secret patterns.
+        let line = buf.substring(0, nl);
+        if (line.endsWith('\r')) { line = line.slice(0, -1); }
         buf = buf.substring(nl + 1);
         if (line.startsWith(HEADER_SENTINEL)) { commitsSeen++; }
         scanLine(state, rules, line, findings);

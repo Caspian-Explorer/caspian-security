@@ -4,6 +4,17 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [10.10.1] - 2026-08-01
+
+Fixes a silent detection failure on Windows, found by the `windows-latest` CI leg added in 10.9.0 on its very first run.
+
+### Fixed
+
+- **CRLF files silently lost findings** — Git on Windows checks files out with CRLF by default, and the scan engine split on `\n`, leaving a trailing `\r` on every line. Any rule pattern anchored to end-of-line (`$`) then failed to match. On the vulnerable corpus this silently dropped `TAINT001`, `TAINT003`, `TAINT006` and `TAINT007` and produced a spurious `TAINT008` — i.e. Windows users with CRLF line endings were getting materially different, wrong results with no indication anything was missed. A new shared `normaliseLineEndings` helper (**[src/scanContext.ts](src/scanContext.ts)**) is now applied at every scan entry point: `scanFile`, `buildLineStates`, `runTaintAnalysis`, the analyzer's project-advisory pass, and the git-history secret scanner's diff-line reader. Only `\r\n` is rewritten — never a lone `\r` — so line counts and column offsets are preserved exactly and diagnostics still point at the right place.
+- New `lineEndings.test.ts` asserts that every vulnerable- and clean-corpus fixture produces **identical findings at identical line and column** under CRLF, plus unit coverage for the helper, `buildLineStates`, and the taint engine. Windows CI deliberately keeps its CRLF checkout, so this path is exercised on every run.
+
+---
+
 ## [10.10.0] - 2026-08-01
 
 Phase B, final batch: much wider rule test coverage, parallel CLI scanning for large repos, and a slimmer VSIX.
