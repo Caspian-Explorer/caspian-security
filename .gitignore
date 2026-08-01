@@ -452,3 +452,5 @@ build/
 # Their contents must never surface as untracked files in the main checkout.
 # Only this subfolder is ignored — a committed .claude/settings.json stays tracked.
 .claude/worktrees/
+# Jest coverage output
+coverage/
