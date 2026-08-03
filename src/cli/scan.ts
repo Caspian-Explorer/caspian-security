@@ -39,6 +39,7 @@ import { walkFiles, runWorkspaceScanParallel, FileResult } from '../scanRunner';
 import { buildSARIF, resolveToolVersion } from '../sarif';
 import { loadBaseline, buildBaseline, writeBaseline, applyBaseline, Baseline } from '../baseline';
 import { getChangedFilesSince } from '../gitDiff';
+import { loadIgnoreFile, isIgnored } from '../caspianIgnore';
 
 // --- CLI argument parsing -------------------------------------------------
 
@@ -282,9 +283,27 @@ export async function runScanCli(argv: string[] = process.argv.slice(2)): Promis
     maxFileSize: opts.maxFileSize,
     concurrency: opts.concurrency,
   });
-  const results: FileResult[] = scan.results;
+  let results: FileResult[] = scan.results;
   const filesSkipped = scan.filesSkipped;
-  const totalIssues = scan.totalIssues;
+
+  // Honour .caspianignore so the CLI agrees with the editor. Historically
+  // only the extension applied it, which meant CI re-reported findings the
+  // team had already reviewed and dismissed.
+  let ignoredCount = 0;
+  const ignoreEntries = loadIgnoreFile(opts.workspace);
+  if (ignoreEntries.length > 0) {
+    results = results
+      .map(r => {
+        const kept = r.issues.filter(issue => {
+          const dropped = isIgnored(ignoreEntries, issue.code, r.relativePath, issue.line);
+          if (dropped) { ignoredCount++; }
+          return !dropped;
+        });
+        return { ...r, issues: kept };
+      })
+      .filter(r => r.issues.length > 0);
+  }
+  const totalIssues = results.reduce((n, r) => n + r.issues.length, 0);
 
   // --update-baseline: write the current findings as the new baseline and exit.
   if (opts.updateBaseline) {
@@ -332,14 +351,15 @@ export async function runScanCli(argv: string[] = process.argv.slice(2)): Promis
   }
 
   // Summarise to stderr so piping --format=sarif works.
+  const ignoredNote = ignoredCount > 0 ? `, ${ignoredCount} ignored via .caspianignore` : '';
   if (opts.baselinePath) {
     process.stderr.write(
       `caspian-scan: scanned ${files.length} file(s)${changedSinceNote}, ${filesSkipped} skipped, ` +
-      `${totalIssues} finding(s) (${baselinedCount} baselined, ${newCount} new)\n`
+      `${totalIssues} finding(s) (${baselinedCount} baselined, ${newCount} new)${ignoredNote}\n`
     );
   } else {
     process.stderr.write(
-      `caspian-scan: scanned ${files.length} file(s)${changedSinceNote}, ${filesSkipped} skipped, ${totalIssues} finding(s)\n`
+      `caspian-scan: scanned ${files.length} file(s)${changedSinceNote}, ${filesSkipped} skipped, ${totalIssues} finding(s)${ignoredNote}\n`
     );
   }
 

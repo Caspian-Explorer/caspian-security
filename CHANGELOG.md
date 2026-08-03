@@ -4,6 +4,30 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [10.12.0] - 2026-08-03
+
+Agent-loop integration: Caspian now runs INSIDE AI-agent coding loops (Claude Code, Cursor, and any MCP client), so vulnerabilities in AI-generated code are caught and fixed by the agent before a human ever sees them.
+
+### Added
+
+- **Claude Code plugin** (`plugin/`, installable from this repo) with three hooks:
+  - `pre-write-guard` (PreToolUse) — denies a write outright when it contains a live provider credential, a wide-open Firebase/Supabase rule, or would commit a non-gitignored `.env` file; **asks** before the agent edits Caspian's own guardrail files (`.caspian/baseline.json`, `caspian.config.json`, `.caspianignore`).
+  - `post-write-scan` (PostToolUse) — scans every file the agent writes; critical/high findings block (exit 2) and feed back to the model for same-turn self-correction, medium findings arrive as non-blocking context, clean files stay silent. A loop guard downgrades any finding that has already blocked twice, caps blocking at 20 events per session, and every failure mode fails open.
+  - `stop-gate` (Stop) — final gate when the agent says "done": unresolved **critical** findings in the working tree block the stop, once per finding set per session.
+  - Hooks ship as committed esbuild bundles (`npm run build:plugin`) — cold start measured at 55–110 ms, no npx in the hook path.
+- **Deploy-config rule pack** (`DEPLOY001`–`DEPLOY010`, 10 new rules — total now 309): open Firestore/Storage rules (`allow write: if true`), world-readable rules, Supabase `disable row level security` and `using (true)` no-op policies, service-role keys and secrets behind client-bundled env prefixes (`NEXT_PUBLIC_`, `VITE_`, …), AI/LLM endpoints with no rate limit, and open Realtime Database rules. `.rules`, `.sql`, and `database.rules.json` files are now scanned by default.
+- **Three new MCP tools** (total now seven): `security_scan_file` (single file, only NEW findings beyond the baseline), `security_scan_changes` (working tree + optional `base` ref, only NEW findings), and `check_deployment_security` (the pre-deploy gate — pre-existing issues included on purpose). Deliberately absent: any tool that suppresses findings or edits scanner config — the agent cannot turn the scanner off.
+- **New CLI commands**: `caspian scan-file <file>` (agent-loop twin of the hook), `caspian ship-check` (deploy check + git-tracked credential files), `caspian baseline accept` (CLI-only baseline acceptance at `.caspian/baseline.json`), and `caspian init` (one-command setup: merges `.mcp.json`, writes idempotent marker-delimited rules blocks into CLAUDE.md/AGENTS.md/.cursorrules, runs the initial baseline scan).
+- **`caspian.config.json`** — headless config shared by hooks, CLI, and MCP: `blockOn`, `ignoreRules`, `ignorePaths`, `maxFindingsInLoop`. It can relax reporting but can never disable the critical-finding block.
+- **Derived 4-level loop severity** (critical/high/medium/low) mapped from the engine's severity × confidence, shared by hooks, `scan-file`, `ship-check`, and the new MCP tools.
+- `explain_rule` now reports `has_mechanical_fix` for the 17 rules with registered auto-fixes.
+
+### Fixed
+
+- **`.caspianignore` was only honoured by the VS Code extension** — the CLI (`caspian scan`) and the MCP `scan` tool now apply it too, so CI and agents agree with the editor about dismissed findings.
+
+---
+
 ## [10.11.1] - 2026-08-03
 
 Documentation accuracy pass ahead of the Marketplace release — no behaviour change.

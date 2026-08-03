@@ -27,10 +27,12 @@ export const DEFAULT_EXTENSIONS = new Set([
   'kt', 'kts',
   'yaml', 'yml',
   'tf', 'tfvars', 'hcl',
+  'rules', 'sql',
 ]);
 
 export const DEFAULT_FILENAMES = new Set([
   'Dockerfile', 'dockerfile', 'Containerfile',
+  'database.rules.json',
 ]);
 
 export const EXT_TO_LANGUAGE: Record<string, string> = {
@@ -41,10 +43,12 @@ export const EXT_TO_LANGUAGE: Record<string, string> = {
   kt: 'kotlin', kts: 'kotlin',
   yaml: 'yaml', yml: 'yaml',
   tf: 'terraform', tfvars: 'terraform', hcl: 'terraform',
+  rules: 'firebase-rules', sql: 'sql',
 };
 
 export const FILENAME_TO_LANGUAGE: Record<string, string> = {
   Dockerfile: 'dockerfile', dockerfile: 'dockerfile', Containerfile: 'dockerfile',
+  'database.rules.json': 'json',
 };
 
 export const DEFAULT_EXCLUDES = [

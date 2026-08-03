@@ -29,6 +29,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { runScanCli } from './scan';
+import { runScanFileCli } from './scanFileCli';
+import { runShipCheckCli } from './shipCheck';
+import { runBaselineCli } from './baselineCli';
+import { runInitCli } from './init';
 import { runGitHistoryCli } from './gitHistoryScan';
 import { runCheckUpdatesCli } from './checkUpdates';
 import { startMcpServer } from './mcpServer';
@@ -62,6 +66,15 @@ function printHelp(): void {
     '\n' +
     'Commands:\n' +
     '  scan [path]              Run the security scanner (SARIF/JSON/text, exit code gating).\n' +
+    '  scan-file <file>         Fast single-file scan with agent-loop semantics\n' +
+    '                             (only NEW findings beyond .caspian/baseline.json).\n' +
+    '  ship-check [path]        Pre-deploy check: open Firebase/Supabase rules, RLS off,\n' +
+    '                             client-exposed secrets, unmetered AI endpoints,\n' +
+    '                             git-tracked credential files. Ignores the baseline.\n' +
+    '  baseline accept [path]   Accept all current findings into .caspian/baseline.json\n' +
+    '                             so agent-loop scans report only NEW findings.\n' +
+    '  init [path]              One-command agent setup: merge .mcp.json, write the\n' +
+    '                             rules block (CLAUDE.md/AGENTS.md/.cursorrules), baseline.\n' +
     '  git-history [path]       Walk git history for leaked secrets.\n' +
     '  check-updates [path]     npm audit + stack version checks.\n' +
     '                             --osv adds an OSV.dev check of non-npm manifests\n' +
@@ -152,6 +165,18 @@ export async function runCaspian(argv: string[] = process.argv.slice(2)): Promis
       break;
     case 'scan':
       await runScanCli(rest);
+      break;
+    case 'scan-file':
+      runScanFileCli(rest);
+      break;
+    case 'ship-check':
+      runShipCheckCli(rest);
+      break;
+    case 'baseline':
+      runBaselineCli(rest);
+      break;
+    case 'init':
+      runInitCli(rest);
       break;
     case 'git-history':
     case 'git-history-scan':

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "caspian": {
+      "command": "npx",
+      "args": ["-y", "caspian-security@latest", "mcp"]
+    }
+  }
+}

@@ -1,13 +1,13 @@
 {
   "name": "caspian-security",
   "displayName": "Caspian Security",
-  "description": "Security scanner for VS Code AND a standalone `caspian` CLI you can run anywhere (PowerShell/cmd/bash, no VS Code needed) — 299 rules covering code and infrastructure (Dockerfile, Terraform, Kubernetes), intra-file taint tracking, SSRF/XXE/SSTI/deserialization/JWT/OAuth/LDAP, 29 provider-prefix secret detectors, git-history scanner, opt-in OSV.dev multi-ecosystem dependency check (Python, Go, Rust, Java, Ruby, PHP), AI fixes, MCP server + one-command AI-agent integration (Claude Code, Cursor, Antigravity), hardened webview, reusable GitHub Action with SARIF upload, Open VSX release",
+  "description": "Security scanner for VS Code AND a standalone `caspian` CLI you can run anywhere (PowerShell/cmd/bash, no VS Code needed) — 309 rules covering code, infrastructure (Dockerfile, Terraform, Kubernetes) and deploy config (open Firebase/Supabase rules, RLS off, client-exposed secrets, unmetered AI endpoints), intra-file taint tracking, SSRF/XXE/SSTI/deserialization/JWT/OAuth/LDAP, 29 provider-prefix secret detectors, git-history scanner, opt-in OSV.dev multi-ecosystem dependency check, AI fixes, agent-loop integration (Claude Code plugin with write-blocking hooks, security_scan_file/security_scan_changes/check_deployment_security MCP tools, `caspian init` for Cursor & others), reusable GitHub Action with SARIF upload, Open VSX release",
   "icon": "icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/Caspian-Explorer/caspian-security"
   },
-  "version": "10.11.1",
+  "version": "10.12.0",
   "publisher": "CaspianTools",
   "license": "MIT",
   "engines": {
@@ -579,6 +579,7 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
+    "build:plugin": "node scripts/buildPlugin.js",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts",
     "test": "jest --forceExit",
@@ -598,6 +599,7 @@
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
+    "esbuild": "^0.28.1",
     "eslint": "^8.0.0",
     "jest": "^30.3.0",
     "ovsx": "^0.10.11",

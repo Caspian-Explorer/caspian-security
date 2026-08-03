@@ -8,10 +8,17 @@
  * client — started by the client as a subprocess.
  *
  * Tools:
- *   scan             Scan a workspace path, return findings (JSON).
- *   scan_git_history Walk git history for leaked secrets.
- *   list_rules       Enumerate all rule codes / categories / severities.
- *   explain_rule     Return the full description + suggestion for a rule code.
+ *   scan                      Scan a workspace path, return findings (JSON).
+ *   security_scan_file        Agent-loop scan of ONE file (only NEW findings).
+ *   security_scan_changes     Agent-loop scan of the changed set (only NEW findings).
+ *   check_deployment_security Pre-deploy config check (rules files, RLS, exposed env).
+ *   scan_git_history          Walk git history for leaked secrets.
+ *   list_rules                Enumerate all rule codes / categories / severities.
+ *   explain_rule              Full description + suggestion for a rule code.
+ *
+ * Deliberately absent: any tool that suppresses findings, accepts a
+ * baseline, or edits scanner config. The agent must not be able to turn
+ * the scanner off; a human runs `caspian baseline accept` / edits config.
  *
  * Transport: stdio (standard for local MCP servers). Clients spawn this
  * bin from their config:
@@ -42,6 +49,13 @@ import * as fs from 'fs';
 import { runWorkspaceScan } from '../scanRunner';
 import { getAllRules, getRuleByCode } from '../rules';
 import { CATEGORY_LABELS, SEVERITY_LABELS } from '../types';
+import { loadIgnoreFile, isIgnored } from '../caspianIgnore';
+import { createLoopScanContext, isScannablePath, scanFileForLoop, scanFilesForLoop } from '../agentLoop/scanForLoop';
+import { formatLoopReport, LoopFinding } from '../agentLoop/severity';
+import { getWorkingTreeChanges } from '../gitWorkingTree';
+import { getChangedFilesSince } from '../gitDiff';
+import { runShipCheck, formatShipCheckReport, shipCheckBlocks } from './shipCheck';
+import { FIX_REGISTRY } from '../codeActions/fixes';
 
 // --- Tool definitions -----------------------------------------------------
 
@@ -80,6 +94,72 @@ const TOOLS = [
         },
       },
       required: ['path'],
+    },
+  },
+  {
+    name: 'security_scan_file',
+    description:
+      'Scans one source file for security vulnerabilities and returns each finding with its impact ' +
+      'and a suggested fix. Call this immediately after writing or editing any file that touches ' +
+      'authentication, user input, database queries, file paths, HTTP requests, secrets, environment ' +
+      'variables, or an AI/LLM API. Only NEW findings are reported — pre-existing, baselined issues ' +
+      'are excluded. Returns an empty list in under a second when the file is clean, so there is no ' +
+      'cost to checking.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: {
+          type: 'string',
+          description: 'Path to the file to scan (absolute, or relative to the project root).',
+        },
+        project_root: {
+          type: 'string',
+          description: 'Project root for baseline/config lookup. Defaults to the git root above the file, else the current directory.',
+        },
+      },
+      required: ['file_path'],
+    },
+  },
+  {
+    name: 'security_scan_changes',
+    description:
+      'Scans every file changed in the working tree (staged, unstaged, and untracked) and returns ' +
+      'only the security issues those changes introduced, ignoring pre-existing ones. Call this ' +
+      'before telling the user a feature is finished, before running git commit, and before any ' +
+      'push. Use this rather than scanning files one at a time when several files have changed. ' +
+      'Pass `base` (e.g. "origin/main") to also include files this branch changed in earlier commits.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        base: {
+          type: 'string',
+          description: 'Optional git ref: also scan files changed since `base...HEAD` (e.g. "origin/main").',
+        },
+        project_root: {
+          type: 'string',
+          description: 'Repository root. Defaults to the current directory.',
+        },
+      },
+    },
+  },
+  {
+    name: 'check_deployment_security',
+    description:
+      'Inspects deployment and platform configuration for the mistakes that most often expose ' +
+      'AI-built apps: Firestore or Supabase rules that allow public read/write, row-level security ' +
+      'left disabled, secrets exposed through client-visible environment variables (NEXT_PUBLIC_, ' +
+      'VITE_, …), AI/LLM endpoints with no rate limit, leaked provider tokens, and credential files ' +
+      'committed to the repo. Call this before any deploy, publish, or release step, when setting ' +
+      'up a database or auth for the first time, and whenever the user asks whether their app is ' +
+      'safe to launch. Pre-existing issues ARE included — this is the launch gate.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_root: {
+          type: 'string',
+          description: 'Project root to inspect. Defaults to the current directory.',
+        },
+      },
     },
   },
   {
@@ -174,10 +254,13 @@ export function handleScan(args: any): ToolResponse {
     exclude: Array.isArray(args?.exclude) ? args.exclude : [],
   });
 
-  // Flatten + filter.
+  // Flatten + filter. .caspianignore is honoured so the MCP surface agrees
+  // with the editor and the CLI.
+  const ignoreEntries = loadIgnoreFile(workspace);
   const flat = result.results.flatMap(r =>
     r.issues
       .filter(i => i.severity >= sevThreshold)
+      .filter(i => !isIgnored(ignoreEntries, i.code, r.relativePath, i.line))
       .map(i => ({
         file: r.relativePath.replace(/\\/g, '/'),
         line: i.line + 1,
@@ -212,6 +295,122 @@ export function handleScan(args: any): ToolResponse {
     },
     findings: truncated,
   });
+}
+
+/**
+ * Best-effort project root for a file: nearest ancestor with .git,
+ * caspian.config.json, or .caspian/ — else the server's cwd (MCP clients
+ * spawn this server at the project root).
+ */
+function resolveProjectRoot(filePath: string): string {
+  let dir = path.dirname(filePath);
+  for (let depth = 0; depth < 50; depth++) {
+    if (
+      fs.existsSync(path.join(dir, '.git')) ||
+      fs.existsSync(path.join(dir, 'caspian.config.json')) ||
+      fs.existsSync(path.join(dir, '.caspian'))
+    ) { return dir; }
+    const parent = path.dirname(dir);
+    if (parent === dir) { break; }
+    dir = parent;
+  }
+  return process.cwd();
+}
+
+function loopFindingsPayload(findings: LoopFinding[], maxInReport: number) {
+  return {
+    report: findings.length === 0 ? 'No new security findings.' : formatLoopReport(findings, maxInReport),
+    findings: findings.map(f => ({
+      file: f.relativePath,
+      line: f.line + 1,
+      column: f.column + 1,
+      severity: f.loopSeverity,
+      code: f.code,
+      message: f.message,
+      fix: f.suggestion,
+      has_mechanical_fix: !!FIX_REGISTRY[f.code],
+    })),
+  };
+}
+
+export function handleSecurityScanFile(args: any): ToolResponse {
+  const raw = args?.file_path;
+  if (typeof raw !== 'string' || !raw) {
+    return toolError('`file_path` must be a non-empty string');
+  }
+  const filePath = path.resolve(raw);
+  if (!fs.existsSync(filePath)) { return toolError(`file does not exist: ${filePath}`); }
+  if (!fs.statSync(filePath).isFile()) { return toolError(`not a file: ${filePath}`); }
+
+  const root = typeof args?.project_root === 'string' && args.project_root
+    ? path.resolve(args.project_root)
+    : resolveProjectRoot(filePath);
+
+  const ctx = createLoopScanContext(root);
+  if (!isScannablePath(filePath, ctx)) {
+    return toolText({ report: 'File type not scanned (or path ignored by config). No findings.', findings: [] });
+  }
+  try {
+    const findings = scanFileForLoop(filePath, ctx);
+    return toolText(loopFindingsPayload(findings, ctx.config.maxFindingsInLoop));
+  } catch (err: any) {
+    return toolError(`scan failed: ${err.message}`);
+  }
+}
+
+export function handleSecurityScanChanges(args: any): ToolResponse {
+  const root = typeof args?.project_root === 'string' && args.project_root
+    ? path.resolve(args.project_root)
+    : process.cwd();
+  if (!fs.existsSync(root)) { return toolError(`project root does not exist: ${root}`); }
+
+  const files = new Set<string>();
+  try {
+    for (const f of getWorkingTreeChanges(root).files) { files.add(f); }
+  } catch (err: any) {
+    return toolError(`could not resolve changed files: ${err.message}`);
+  }
+  if (typeof args?.base === 'string' && args.base) {
+    try {
+      for (const f of getChangedFilesSince(root, args.base).files) { files.add(f); }
+    } catch (err: any) {
+      return toolError(`could not diff against base '${args.base}': ${err.message}`);
+    }
+  }
+
+  const ctx = createLoopScanContext(root);
+  const findings = scanFilesForLoop(files, ctx);
+  return toolText({
+    changed_files: files.size,
+    ...loopFindingsPayload(findings, ctx.config.maxFindingsInLoop),
+  });
+}
+
+export function handleCheckDeploymentSecurity(args: any): ToolResponse {
+  const root = typeof args?.project_root === 'string' && args.project_root
+    ? path.resolve(args.project_root)
+    : process.cwd();
+  if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+    return toolError(`project root is not a directory: ${root}`);
+  }
+  try {
+    const result = runShipCheck(root);
+    return toolText({
+      report: formatShipCheckReport(result),
+      blocking: shipCheckBlocks(result),
+      tracked_credential_files: result.trackedCredentials,
+      findings: result.findings.map(f => ({
+        file: f.relativePath,
+        line: f.line + 1,
+        severity: f.loopSeverity,
+        code: f.code,
+        message: f.message,
+        fix: f.suggestion,
+      })),
+    });
+  } catch (err: any) {
+    return toolError(`deployment check failed: ${err.message}`);
+  }
 }
 
 export function handleGitHistoryScan(args: any): ToolResponse {
@@ -280,6 +479,7 @@ export function handleExplainRule(args: any): ToolResponse {
     rule_type: rule.ruleType,
     message: rule.message,
     suggestion: rule.suggestion,
+    has_mechanical_fix: !!FIX_REGISTRY[rule.code],
     context_aware: rule.contextAware === true,
     file_patterns: rule.filePatterns
       ? {
@@ -293,6 +493,9 @@ export function handleExplainRule(args: any): ToolResponse {
 export function dispatchTool(name: string, args: unknown): ToolResponse {
   switch (name) {
     case 'scan': return handleScan(args);
+    case 'security_scan_file': return handleSecurityScanFile(args);
+    case 'security_scan_changes': return handleSecurityScanChanges(args);
+    case 'check_deployment_security': return handleCheckDeploymentSecurity(args);
     case 'scan_git_history': return handleGitHistoryScan(args);
     case 'list_rules': return handleListRules(args);
     case 'explain_rule': return handleExplainRule(args);

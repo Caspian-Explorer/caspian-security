@@ -72,11 +72,12 @@ describe('buildMcpConfig', () => {
 });
 
 describe('formatMcpConfigForDisplay', () => {
-  it('includes the target path, valid JSON, and the four tool names', () => {
+  it('includes the target path, valid JSON, and the current tool names', () => {
     const blob = formatMcpConfigForDisplay('cursor');
     expect(blob).toContain('.cursor/mcp.json');
     expect(blob).toContain('"mcpServers"');
-    expect(blob).toContain('scan, scan_git_history, list_rules, explain_rule');
+    expect(blob).toContain('seven tools: scan, security_scan_file,');
+    expect(blob).toContain('security_scan_changes, check_deployment_security, scan_git_history, list_rules, explain_rule');
     // The JSON block within the blob must still parse.
     const start = blob.indexOf('{');
     const end = blob.lastIndexOf('}');

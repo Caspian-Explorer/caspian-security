@@ -6,7 +6,7 @@ Context-aware security analysis for Visual Studio Code.
 
 ## Overview
 
-Caspian Security detects vulnerabilities, insecure coding patterns, and security best-practice violations across code AND infrastructure (Dockerfile, Terraform, Kubernetes YAML). It ships as a **VS Code extension** for inline feedback and as an **npm-installable CLI** for CI pipelines — both backed by the same 299-rule engine, intra-file taint tracking, and provider-prefix secret detection.
+Caspian Security detects vulnerabilities, insecure coding patterns, and security best-practice violations across code AND infrastructure (Dockerfile, Terraform, Kubernetes YAML). It ships as a **VS Code extension** for inline feedback and as an **npm-installable CLI** for CI pipelines — both backed by the same 309-rule engine, intra-file taint tracking, and provider-prefix secret detection.
 
 What sets it apart: **context-aware intelligence**. The scanner classifies issues with confidence scores based on variable-source analysis, follows user input through function bodies to flag real dataflow bugs, and its AI fixes work on a per-invocation consent model with minimal-context default — no full file contents leave your workspace unless you opt in.
 
@@ -39,6 +39,10 @@ caspian scan .                 # main scanner — SARIF / JSON / text, exit-code
 caspian git-history .          # walk git history for leaked secrets
 caspian check-updates          # npm audit + stack version checks (--osv adds OSV.dev multi-ecosystem scan)
 caspian mcp                    # start the MCP server (stdio)
+caspian scan-file <file>       # single-file scan, only NEW findings beyond the baseline
+caspian ship-check             # pre-deploy check: open DB rules, exposed secrets, unmetered AI endpoints
+caspian baseline accept        # accept current findings into .caspian/baseline.json
+caspian init                   # one-command AI-agent setup (.mcp.json + rules block + baseline)
 caspian snippet                # print a paste-ready AI-agent instruction block
 caspian mcp-config             # print an MCP client config block
 caspian --help                 # full command list
@@ -47,6 +51,26 @@ caspian --help                 # full command list
 Exit codes: `0` = clean, `1` = findings at/above the `--fail-on` threshold, `2` = the scan failed.
 The original `caspian-scan` / `caspian-git-history-scan` / `caspian-check-updates` / `caspian-mcp`
 bins still work unchanged.
+
+### In the agent loop — Claude Code plugin (hooks + MCP)
+
+In vibe coding the human isn't reading the diff, so Caspian can run **inside** the agent's loop.
+The Claude Code plugin (in this repo's `plugin/` directory) wires three hooks plus the MCP server:
+
+- **Write-time blocking** — a write containing a live provider credential, a wide-open
+  Firebase/Supabase rule, or a committable `.env` file is denied before it lands.
+- **Post-edit scanning** — every file the agent writes is scanned; critical/high findings are fed
+  back and the agent fixes them in the same turn. Clean files stay silent. A loop guard prevents
+  block ping-pong, and every failure mode fails open (a broken scanner never breaks your session).
+- **Stop gate** — when the agent says "done", unresolved *critical* findings in the working tree
+  block the turn from ending, once.
+- **`/caspian-security:ship-check`** — slash command for the pre-deploy check.
+
+Install: `/plugin marketplace add CaspianTools/caspian-security` then
+`/plugin install caspian-security@caspian-tools`. Only NEW findings surface in the loop —
+run `caspian baseline accept` once to baseline pre-existing ones.
+
+For Cursor and other agents, `caspian init` sets up the MCP server + rules block in one command.
 
 ### Run it from any AI agent (Claude Code, Cursor, Antigravity, …)
 
@@ -78,8 +102,12 @@ writes into your project — it only gives you text to paste wherever you like.
 }
 ```
 
-Gives the assistant four tools: `scan`, `scan_git_history`, `list_rules`, `explain_rule`. Where the
-config lives per client:
+Gives the assistant seven tools: `scan`, `security_scan_file`, `security_scan_changes`,
+`check_deployment_security`, `scan_git_history`, `list_rules`, `explain_rule`. The three
+`security_*` tools are agent-loop aware: the first two report only NEW findings beyond
+`.caspian/baseline.json`, while `check_deployment_security` deliberately includes pre-existing
+issues — it is the launch gate. There is intentionally no tool that suppresses findings or edits
+scanner config. Where the config lives per client:
 
 | Client | Config location |
 |---|---|
@@ -95,7 +123,7 @@ Run `caspian mcp-config --client <name>` to print the block with the right path.
 ### In GitHub Actions
 
 ```yaml
-- uses: Caspian-Explorer/caspian-security/.github/actions/scan@v10.11.1
+- uses: Caspian-Explorer/caspian-security/.github/actions/scan@v10.12.0
   with:
     path: .
     fail-on: error
@@ -111,7 +139,7 @@ Findings land in the GitHub Security tab automatically. The npm CLI and the exte
 - **One-click quick-fix lightbulb** -- 18 mechanical remediations (Kubernetes `privileged: true→false`, Terraform public-access flags, `jwt.verify` gets `algorithms: ['RS256']`, `yaml.unsafe_load → safe_load`, `md5/sha1 → sha256`, `http:// → https://`, Dockerfile `ADD → COPY` and hardened package installs, etc.) applied instantly via Ctrl+. No AI round-trip, fully reversible with undo
 - **Context-aware analysis** -- every finding carries a confidence badge (Critical / Verify needed / Likely safe), resolved from variable-source heuristics, per-rule base confidence (provider tokens and exact IaC keys are Critical), and learned behavior
 - **AI fixes with function-level understanding** -- sends the entire enclosing function and traced variable definitions to the AI, not just 20 lines of context
-- **299 security rules** across 14 categories with actionable fix suggestions
+- **309 security rules** across 14 categories with actionable fix suggestions
 - **Real-time analysis** -- checks code as you type with a 1-second debounce to avoid lag
 - **Full workspace scanning** -- scans all project files on disk, not just open tabs
 - **9 languages + infrastructure files** -- JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin, plus Dockerfile, Terraform, and Kubernetes/YAML manifests
@@ -170,7 +198,7 @@ Findings land in the GitHub Security tab automatically. The npm CLI and the exte
 | Dependencies & Supply Chain       | 6     | DEP001--DEP006   | Version pinning, patching SLA, auditing, transitive deps       |
 | Infrastructure & Deployment       | 13    | INFRA001--008, HDR001--005 | Env separation, debug mode, security headers, Cache-Control |
 
-**Total: 299 rules** — 291 pattern rules (215 code-detectable + 65 informational + 11 project advisories) + 8 taint-tracking rules
+**Total: 309 rules** — 301 pattern rules (225 code-detectable + 65 informational + 11 project advisories) + 8 taint-tracking rules
 
 ---
 
