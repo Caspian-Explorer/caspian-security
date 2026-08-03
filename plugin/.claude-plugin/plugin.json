@@ -1,0 +1,9 @@
+{
+  "name": "caspian-security",
+  "description": "Catches security holes in AI-generated code before you ship. Scans every file the agent writes, blocks secrets and open database rules at write time, and runs a pre-deploy check for the mistakes that actually expose vibe-coded apps: open Firestore/Supabase rules, keys in the client bundle, RLS left disabled, and AI endpoints with no rate limit.",
+  "version": "0.1.0",
+  "author": { "name": "CaspianTools" },
+  "homepage": "https://github.com/CaspianTools/caspian-security",
+  "repository": "https://github.com/CaspianTools/caspian-security",
+  "license": "MIT"
+}

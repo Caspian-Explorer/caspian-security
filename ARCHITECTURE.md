@@ -57,7 +57,7 @@
 │ (15 rule │ │ Analyzer     │ │ Extractor    │ │ ignore       │
 │ files)   │ │              │ │              │ │              │
 │          │ │- Critical    │ │- Function    │ │- Parse file  │
-│- 299     │ │- Safe        │ │  scope       │ │- Watch       │
+│- 309     │ │- Safe        │ │  scope       │ │- Watch       │
 │  rules   │ │- Verify      │ │- Variable    │ │- Match rules │
 │- Patterns│ │  needed      │ │  definitions │ │- Persist     │
 └──────────┘ └──────────────┘ └──────────────┘ └──────────────┘
@@ -142,8 +142,20 @@ Each file exports an array of `SecurityRule` objects:
 | `loggingRules.ts` | Logging & Monitoring | LOG001--LOG009 |
 | `dependenciesRules.ts` | Dependencies & Supply Chain | DEP001--DEP006 |
 | `infrastructureRules.ts` | Infrastructure & Deployment | INFRA001--INFRA008 |
+| `deployConfigRules.ts` | Deploy config (spans Infra / Secrets / API) | DEPLOY001--DEPLOY010 |
 
-**Total: 299 rules** — 291 pattern rules (215 code-detectable + 65 informational + 11 project advisories) + 8 taint-tracking rules
+**Total: 309 rules** — 301 pattern rules (225 code-detectable + 65 informational + 11 project advisories) + 8 taint-tracking rules
+
+### Agent-loop layer (10.12.0)
+
+The engine is also a participant in AI-agent coding loops. Pure-Node modules with no VS Code dependency:
+
+- **`agentLoop/severity.ts`** — derives a 4-level loop severity from the engine's 3-level severity × confidence: `Error`+`critical` → **critical** (always blocks), `Error` → **high** (blocks by default), `Warning` → **medium** (context), `Info` → **low** (never surfaced). Also owns the in-loop report format (max 5 findings, 8 kB cap, findings phrased as facts — never as instructions to the model).
+- **`agentLoop/scanForLoop.ts`** — the shared single-file/changed-set pipeline: engine scan → drop Info → `.caspianignore` → `caspian.config.json` ignoreRules → baseline (`.caspian/baseline.json`, only NEW findings survive). Used by `caspian scan-file`, the `security_scan_file`/`security_scan_changes` MCP tools, and the plugin hooks — one implementation, no drift.
+- **`fileConfig.ts`** — `caspian.config.json` loader (blockOn / ignoreRules / ignorePaths / maxFindingsInLoop). Can relax reporting; cannot disable the critical-finding block.
+- **`gitWorkingTree.ts`** — working-tree + untracked changed-file resolution (the complement of `gitDiff.ts`, which is committed-diff only).
+- **`hooks/`** — Claude Code hook sources: `preWriteGuard` (denies live credentials / wide-open platform rules / committable `.env`; asks on guardrail-file edits), `postWriteScan` (block-or-context feedback with a per-session loop guard), `stopGate` (blocks stopping on unresolved criticals, once per finding set). Bundled by esbuild into `plugin/hooks/` (committed) via `npm run build:plugin`. Every hook fails open.
+- **`plugin/`** — the Claude Code plugin: manifest, `hooks/hooks.json`, bundled hooks, `.mcp.json` (spawns `caspian mcp` via npx), `/caspian-security:ship-check` command, and a `ship-check` skill.
 
 ### Security Rule Structure
 
@@ -337,7 +349,7 @@ interface SecurityRule {
 | `scanInsights.ts` | ~230 | Actionable intelligence generation |
 | `telemetryService.ts` | ~240 | Opt-in anonymized rule stats |
 | `learningPanel.ts` | ~300 | Learning dashboard webview |
-| `rules/` (14 files) | ~1200 | 299 security rule definitions (291 pattern + 8 taint) |
+| `rules/` (14 files) | ~1200 | 309 security rule definitions (301 pattern + 8 taint) |
 | **Total** | **~7950+** | |
 
 **Memory usage**: ~5-10 MB

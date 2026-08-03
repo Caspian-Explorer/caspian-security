@@ -24,7 +24,16 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 import { SecurityIssue } from './types';
+
+/**
+ * Standard on-disk location used by the agent-loop surfaces (hooks, the
+ * `security_scan_*` MCP tools, `caspian baseline accept`, `caspian init`).
+ * The classic CLI keeps its explicit `--baseline <file>` flag; this default
+ * exists so those newer surfaces agree on one path without configuration.
+ */
+export const DEFAULT_BASELINE_PATH = path.join('.caspian', 'baseline.json');
 
 export interface Baseline {
   version: 1;
@@ -59,6 +68,20 @@ export function loadBaseline(filePath: string): Baseline {
     throw new Error(`baseline file has unsupported shape (expected { version: 1, counts: {...} }): ${filePath}`);
   }
   return parsed as Baseline;
+}
+
+/**
+ * Load the baseline at the standard `.caspian/baseline.json` location,
+ * or null when none exists or it is unreadable. The agent-loop callers
+ * treat a broken baseline as "no baseline" (fail open) rather than
+ * erroring — the classic CLI path keeps its strict loadBaseline().
+ */
+export function loadDefaultBaseline(workspaceRoot: string): Baseline | null {
+  try {
+    return loadBaseline(path.join(workspaceRoot, DEFAULT_BASELINE_PATH));
+  } catch {
+    return null;
+  }
 }
 
 /**

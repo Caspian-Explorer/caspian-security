@@ -101,7 +101,7 @@ Open the Problems panel (`Ctrl+Shift+M`). You should see security warnings with 
 
 ## Use It Without VS Code (Standalone CLI + AI Agents)
 
-Caspian is also a standalone `caspian` command that runs in any terminal — PowerShell, cmd, or bash — and integrates with any AI coding agent. No project-side setup is required; it never writes into your repos.
+Caspian is also a standalone `caspian` command that runs in any terminal — PowerShell, cmd, or bash — and integrates with any AI coding agent. No project-side setup is required, and nothing writes into your repos unless you explicitly run `caspian init`.
 
 ```bash
 # Zero install (any shell)
@@ -113,13 +113,18 @@ caspian scan .                 # scan (SARIF/JSON/text) — exit 0 clean / 1 fin
 caspian git-history .          # walk git history for leaked secrets
 caspian check-updates          # npm audit + stack version checks (--osv adds OSV.dev multi-ecosystem scan)
 caspian mcp                    # start the MCP server (stdio)
+caspian scan-file <file>       # single-file scan, only NEW findings beyond the baseline
+caspian ship-check .           # pre-deploy check (open DB rules, exposed secrets, AI endpoints)
+caspian init .                 # one-command AI-agent setup (.mcp.json + rules block + baseline)
 caspian snippet --agent claude # print a paste-ready CLAUDE.md block for an AI agent
 caspian mcp-config --client cursor  # print an MCP config for a client
 ```
 
 To wire Caspian into an AI agent (Claude Code, Cursor, Antigravity, Claude Desktop, Cline):
-run `caspian snippet` and paste the block into the agent's config, or `caspian mcp-config` for
-the MCP route. Full per-client details are in [BUILD.md §3c–3d](BUILD.md) and [README.md](README.md).
+run `caspian init` in the project, or `caspian snippet` / `caspian mcp-config` for paste-only
+setup. Claude Code users should install the plugin (write-blocking hooks + in-loop scanning) —
+see [README.md](README.md). Full per-client details are in [BUILD.md §3c–3d](BUILD.md) and
+[docs/USER_GUIDE.md §5](docs/USER_GUIDE.md).
 
 ---
 
@@ -374,7 +379,7 @@ Before each release:
 | Metric | Value |
 |--------|-------|
 | Source Code | ~5300+ lines TypeScript |
-| Security Rules | 299 across 14 categories |
+| Security Rules | 309 across 14 categories |
 | Languages Supported | 8 |
 | AI Providers | 3 (Claude, GPT-4, Gemini) |
 | Export Formats | 3 (JSON, CSV, SARIF) |

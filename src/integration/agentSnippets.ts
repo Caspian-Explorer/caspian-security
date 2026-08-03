@@ -137,7 +137,7 @@ export function buildAgentInstructions(agent: AgentId = 'claude', mode: TriggerM
     '',
     '## Security scanning — Caspian Security',
     '',
-    'Caspian Security is a standalone security scanner (295+ rules: secrets, injection,',
+    'Caspian Security is a standalone security scanner (300+ rules: secrets, injection,',
     'SSRF, XSS, JWT/OAuth, deserialization, IaC misconfig for Docker/Terraform/Kubernetes,',
     'and intra-file taint tracking). It needs no configuration in this repository.',
     '',
@@ -155,6 +155,48 @@ export function buildAgentInstructions(agent: AgentId = 'claude', mode: TriggerM
     '',
     'Exit codes: `0` = clean, `1` = findings at/above the threshold, `2` = the scan failed to run.',
     '',
+  ].join('\n');
+}
+
+/**
+ * Idempotency markers for blocks that `caspian init` writes into rules
+ * files (CLAUDE.md / AGENTS.md / .cursorrules). Everything between the
+ * markers is owned by Caspian and replaced wholesale on re-run; text
+ * outside them is never touched.
+ */
+export const CASPIAN_MARKER_START = '<!-- caspian:start -->';
+export const CASPIAN_MARKER_END = '<!-- caspian:end -->';
+
+/**
+ * The in-loop rules block for agents driven by MCP tools (the spec's
+ * "rules-file snippet"). Distinct from buildAgentInstructions, which
+ * predates the agent-loop tools and instructs a CLI-only workflow.
+ */
+export function buildLoopRulesBlock(agent: AgentId = 'claude'): string {
+  const cursorPreamble = agent === 'cursor'
+    ? 'Caspian Security MCP tools are available. Treat a scan as part of finishing\n' +
+      'a task, not an optional extra step.\n\n'
+    : '';
+  return [
+    CASPIAN_MARKER_START,
+    '## Security scanning',
+    '',
+    `${cursorPreamble}This project uses Caspian Security.`,
+    '',
+    '- After writing or editing a file that touches auth, user input, database',
+    '  queries, file paths, HTTP requests, secrets, env vars, or an AI API,',
+    '  call `security_scan_file` on it.',
+    '- Before saying a feature is done, and before any commit, push, or deploy,',
+    '  call `security_scan_changes`.',
+    '- Before a first deploy or after changing database rules, auth, or env',
+    '  config, call `check_deployment_security`.',
+    '',
+    'Fix critical and high findings before continuing. Do not add ignore rules,',
+    'suppressions, or baseline entries to silence a finding.',
+    '',
+    'If the MCP tools are unavailable, run:',
+    '`npx -y caspian-security scan . --format json --fail-on error`',
+    CASPIAN_MARKER_END,
   ].join('\n');
 }
 
@@ -198,7 +240,8 @@ export function formatMcpConfigForDisplay(client: McpClientId = 'claude-code'): 
     '',
     `# ${note.replace(/\n/g, '\n# ')}`,
     '#',
-    '# Once wired up, the assistant gets four tools: scan, scan_git_history, list_rules, explain_rule.',
+    '# Once wired up, the assistant gets seven tools: scan, security_scan_file,',
+    '# security_scan_changes, check_deployment_security, scan_git_history, list_rules, explain_rule.',
     '',
   ].join('\n');
 }

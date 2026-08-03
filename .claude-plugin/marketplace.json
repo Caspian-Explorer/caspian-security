@@ -1,0 +1,11 @@
+{
+  "name": "caspian-tools",
+  "owner": { "name": "CaspianTools" },
+  "plugins": [
+    {
+      "name": "caspian-security",
+      "source": "./plugin",
+      "description": "Catches security holes in AI-generated code before you ship. Scans every file the agent writes, blocks secrets and open database rules at write time, and runs a pre-deploy check for the mistakes that actually expose vibe-coded apps."
+    }
+  ]
+}

@@ -4,10 +4,11 @@
 
 A **production-ready VS Code security extension** — and a **standalone `caspian` CLI** you can run anywhere — with:
 
-- **299 security rules** across 14 categories
+- **309 security rules** across 14 categories
 - **Context-aware analysis** with confidence scoring
 - **AI-powered fixes** using Claude, GPT-4, or Gemini with function-level understanding
 - **Standalone `caspian` command** for PowerShell / cmd / bash (no VS Code needed) + one-line AI-agent integration (Claude Code, Cursor, Antigravity, Claude Desktop, Cline) via MCP or `npx`
+- **Agent-loop integration (10.12.0)** — a Claude Code plugin whose hooks block secret/open-rule writes, feed findings back for same-turn self-correction, and gate "done" on unresolved criticals; plus `caspian init` one-command setup for Cursor & other MCP agents, and a deploy-config rule pack (open Firebase/Supabase rules, RLS off, client-exposed secrets, unmetered AI endpoints)
 - **Team-shareable `.caspianignore`** for managing false positives
 - **SARIF v2.1.0 export** for GitHub Security Alerts
 - **9 languages + infrastructure files** -- JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin, plus Dockerfile, Terraform, and Kubernetes/YAML manifests
@@ -123,7 +124,7 @@ caspian-security/
 | Dependencies & Supply Chain | 6 | DEP001--DEP006 |
 | Infrastructure & Deployment | 8 | INFRA001--INFRA008 |
 
-**Total: 299 rules** — 291 pattern rules (215 code-detectable + 65 informational + 11 project advisories) + 8 taint-tracking rules
+**Total: 309 rules** — 301 pattern rules (225 code-detectable + 65 informational + 11 project advisories) + 8 taint-tracking rules
 
 ---
 
@@ -168,7 +169,7 @@ All settings use the `caspianSecurity.*` namespace:
 | Metric | Value |
 |--------|-------|
 | **Source Code** | ~5300+ lines TypeScript |
-| **Security Rules** | 299 across 14 categories |
+| **Security Rules** | 309 across 14 categories |
 | **Languages Supported** | 8 |
 | **AI Providers** | 3 (Claude, GPT-4, Gemini) |
 | **Export Formats** | 3 (JSON, CSV, SARIF) |

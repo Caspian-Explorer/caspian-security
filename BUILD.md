@@ -29,6 +29,17 @@ Generates JavaScript files in `out/` from TypeScript sources in `src/`.
 > published VSIX shouldn't carry `.d.ts`/`.js.map` weight). Flip either flag
 > on locally if you need declarations or step-debugging.
 
+### 2b. Build the Claude Code plugin bundles
+
+```
+npm run build:plugin
+```
+
+Bundles `src/hooks/*.ts` (engine included, via esbuild) into self-contained
+`plugin/hooks/*.js` files. **The bundles are committed** — `/plugin install`
+clones this repo with no build step, so re-run this and commit the result
+after any change to `src/hooks/`, `src/rules/`, or the engine.
+
 ### 3. Run in Development Mode
 
 **Option A: VS Code debug mode**
@@ -105,8 +116,12 @@ caspian-security/
 │   │   ├── loggingRules.ts     # LOG001--LOG009
 │   │   ├── dependenciesRules.ts # DEP001--DEP006
 │   │   └── infrastructureRules.ts # INFRA001--INFRA008
+│   ├── agentLoop/              # Agent-loop scan pipeline (loop severity, baseline-filtered scans)
+│   ├── hooks/                  # Claude Code hook sources (pre-write guard, post-write scan, stop gate)
 │   └── cli/
 │       └── checkUpdates.ts     # Standalone dependency checker CLI
+├── plugin/                     # Claude Code plugin (manifest, hooks.json, committed hook bundles)
+├── scripts/buildPlugin.js      # esbuild bundler: src/hooks/*.ts → plugin/hooks/*.js
 ├── out/                        # Compiled JavaScript (generated)
 ├── package.json                # Extension manifest and dependencies
 ├── tsconfig.json               # TypeScript configuration

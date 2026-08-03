@@ -22,6 +22,11 @@ import { businessLogicRules } from './businessLogicRules';
 import { loggingRules } from './loggingRules';
 import { dependenciesRules } from './dependenciesRules';
 import { infrastructureRules } from './infrastructureRules';
+import {
+  deployConfigInfraRules,
+  deployConfigSecretsRules,
+  deployConfigApiRules,
+} from './deployConfigRules';
 import { dockerfileRules } from './dockerfileRules';
 import { terraformRules } from './terraformRules';
 import { kubernetesRules } from './kubernetesRules';
@@ -48,10 +53,10 @@ const allRulesByCategory: Record<SecurityCategory, SecurityRule[]> = {
   [SecurityCategory.CSRFProtection]: csrfRules,
   [SecurityCategory.CORSConfiguration]: corsRules,
   [SecurityCategory.EncryptionDataProtection]: [...encryptionRules, ...kotlinEncryptionRules],
-  [SecurityCategory.APISecurity]: [...apiSecurityRules, ...ssrfRules, ...cmdInjectionRules],
+  [SecurityCategory.APISecurity]: [...apiSecurityRules, ...ssrfRules, ...cmdInjectionRules, ...deployConfigApiRules],
   [SecurityCategory.DatabaseSecurity]: [...databaseRules, ...kotlinDatabaseRules],
   [SecurityCategory.FileHandling]: [...fileHandlingRules, ...kotlinFileRules],
-  [SecurityCategory.SecretsCredentials]: [...secretsRules, ...providerSecretsRules, ...kotlinSecretsRules],
+  [SecurityCategory.SecretsCredentials]: [...secretsRules, ...providerSecretsRules, ...kotlinSecretsRules, ...deployConfigSecretsRules],
   [SecurityCategory.FrontendSecurity]: frontendRules,
   [SecurityCategory.BusinessLogicPayment]: businessLogicRules,
   [SecurityCategory.LoggingMonitoring]: [...loggingRules, ...kotlinLoggingRules],
@@ -62,6 +67,7 @@ const allRulesByCategory: Record<SecurityCategory, SecurityRule[]> = {
     ...dockerfileRules,
     ...terraformRules,
     ...kubernetesRules,
+    ...deployConfigInfraRules,
   ],
 };
 

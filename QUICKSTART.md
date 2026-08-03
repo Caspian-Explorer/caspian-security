@@ -49,7 +49,7 @@ function getUser(id) {
 
 ## What It Detects
 
-299 security rules across 14 categories:
+309 security rules across 14 categories:
 
 | Category | Examples |
 |----------|----------|
@@ -90,14 +90,18 @@ npx -y caspian-security scan . --format json --fail-on error
 # Or install once
 npm install -g caspian-security
 caspian scan .            # scan the current project
+caspian ship-check .      # pre-deploy check: open DB rules, exposed secrets, AI endpoints
+caspian init .            # one-command AI-agent setup (.mcp.json + rules block + baseline)
 caspian snippet           # print a paste-ready CLAUDE.md / rules block for an AI agent
 caspian mcp-config        # print an MCP client config block
 caspian --help            # full command list
 ```
 
 To let an AI agent (Claude Code, Cursor, Antigravity, …) run Caspian while it works, run
-`caspian snippet --agent claude` and paste the block into your project's `CLAUDE.md`. See
-[BUILD.md §3c–3d](BUILD.md) and [README.md](README.md) for MCP and per-client details.
+`caspian init` in the project (or `caspian snippet --agent claude` for the paste-only route).
+Claude Code users get the richest integration from the plugin — hooks that block secret/open-rule
+writes and feed findings back into the agent's loop. See [README.md](README.md) and
+[docs/USER_GUIDE.md §5](docs/USER_GUIDE.md) for details.
 
 ## Next Steps
 
