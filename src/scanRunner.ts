@@ -329,6 +329,11 @@ export function scanFile(
           if (isInsideComment(line, column, ls) ||
               isInsideStringContent(line, column, ls) ||
               isInsideJSXText(line, column)) { continue; }
+        } else if (rule.skipComments) {
+          // Comment-only suppression — commented-out code isn't running
+          // code. String literals are deliberately still matched (see the
+          // `skipComments` doc on SecurityRule).
+          if (isInsideComment(line, column, lineStates[lineNum])) { continue; }
         }
 
         if (rule.negativePatterns) {

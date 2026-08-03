@@ -500,6 +500,9 @@ Look up any rule from the CLI or MCP:
 caspian mcp   # then ask the assistant to explain e.g. FILE009
 ```
 
+
+> **Note:** advisory/reminder rules skip matches inside comments, so commented-out code and prose stay quiet. Secret detection is exempt — a credential in a comment is still reported.
+
 Languages: **JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin** + Infrastructure-as-code (**Dockerfile, Terraform/HCL, Kubernetes YAML**) — infrastructure files are scanned both in the editor and by the CLI as of 10.8.
 
 ---

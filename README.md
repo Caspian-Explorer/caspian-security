@@ -295,6 +295,8 @@ Confidence badges appear:
 
 The adaptive learning engine then shifts levels over time — rules you repeatedly dismiss as false positives get downgraded; rules whose findings you consistently fix get upgraded.
 
+**Commented-out code doesn't raise findings.** Advisory/reminder rules skip matches inside comments, so prose and disabled code stay quiet. Secret detection is deliberately exempt — a credential pasted into a comment is still a leaked credential, and Caspian will still report it.
+
 ---
 
 ## Learning Intelligence

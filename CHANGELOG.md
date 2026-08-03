@@ -4,6 +4,25 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [10.11.0] - 2026-08-02
+
+False-positive cleanup driven by dogfooding: every fix below came from running Caspian against its own source and triaging what it flagged. Measured effect on that self-scan: **197 → 165 findings (32 fewer false positives, ~16% less noise)** with no loss of true detections.
+
+### Added
+
+- **`skipComments` rule option** — suppresses matches inside comments while **still matching string literals**. This is deliberately narrower than the existing `contextAware`, which also suppresses strings and would silently break rules that must match string content (DEP001 exists to find `"^1.2.3"` inside `package.json`). Commented-out code isn't running code, so it shouldn't raise behavioural findings.
+- **Applied by default to Informational rules** at the registry (**[src/rules/index.ts](src/rules/index.ts)**), so new reminder rules inherit it automatically — 65 rules in total. **Provider-token detectors are explicitly exempt**: a credential pasted into a comment is still a leaked credential, and a regression test asserts that a token in a `//` comment is still reported.
+- `falsePositiveTuning.test.ts` — 15 regression tests pinning every case below, including the "secret in a comment is still found" guarantee and the "string literals stay matchable" distinction.
+
+### Fixed
+
+- **`CRED007` matched property access, not just filenames** — the pattern `\.env\b` matched `process.env.API_KEY` and `vscode.env.clipboard`, so it fired in virtually every Node/TypeScript project. Now requires `.env` to begin a path segment: `.env`, `./.env` and `".env.local"` still match; `process.env` no longer does.
+- **`LOG009` matched the `export` keyword** — its `(export|download).*(data|report|csv|pdf)` pattern meant ordinary TypeScript declarations like `export function scanFileBatch(data: …)` were flagged as data-export operations, firing in **22% of Caspian's own source files**. Retargeted at genuine export *operations* (`exportData()`, `/api/export` routes) rather than the language keyword.
+- **`DEP001` / `DEP002` were ungated** — dependency-manifest rules (looking for `"^1.2.3"`, `"dependencies":`, `require(`) ran against every source file, so DEP001 flagged the `'*'` literals inside a glob parser and DEP002 flagged every `require()` call. Both are now restricted via `filePatterns` to actual manifests (`package.json`, `requirements.txt`, `go.mod`, `Cargo.toml`, `pom.xml`, `Gemfile`, `composer.json`, …).
+- **`HDR005`, `API010`, `CRED007`, `BIZ007` fired on code comments** — e.g. the prose `res.json(token)` and `req.params.id` inside explanatory comments. Resolved by the `skipComments` default above.
+
+---
+
 ## [10.10.1] - 2026-08-01
 
 Fixes a silent detection failure on Windows, found by the `windows-latest` CI leg added in 10.9.0 on its very first run.

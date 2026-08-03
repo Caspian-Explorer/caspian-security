@@ -72,6 +72,9 @@ export const securityHeadersRules: SecurityRule[] = [
     ],
     negativePatterns: [/Cache-Control/i, /no-store/i],
     suppressIfNearby: [/Cache-Control/i, /no-store/i, /no-cache/i],
+    // Describes runtime response behaviour — a commented-out `res.json(token)`
+    // sends nothing. Strings stay matchable (not `contextAware`).
+    skipComments: true,
     suggestion:
       'Responses containing sensitive data (tokens, passwords, PII) should include Cache-Control: no-store to prevent browsers and proxies from caching them.',
     category: SecurityCategory.InfrastructureDeployment,

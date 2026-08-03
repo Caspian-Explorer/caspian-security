@@ -432,6 +432,8 @@ DB001 src/api/users.ts:100</code></pre>
     <tr><td>Dependencies &amp; Supply Chain</td><td>Unpinned versions (<code>"*"</code>, <code>^</code>), audit findings</td></tr>
     <tr><td>Infrastructure &amp; Deployment</td><td>Dockerfile / Terraform / Kubernetes misconfig, test data in prod</td></tr>
   </table>
+
+  <p><strong>Note:</strong> advisory/reminder rules skip matches inside comments, so commented-out code and prose stay quiet. Secret detection is exempt — a credential in a comment is still reported.</p>
   <p>Languages: <strong>JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin</strong> + Infrastructure-as-code (<strong>Dockerfile, Terraform/HCL, Kubernetes YAML</strong>) — infrastructure files are scanned both in the editor and by the CLI as of 10.8. Look up any rule via the MCP tools <code>list_rules</code> / <code>explain_rule</code>.</p>
 
   <!-- 10 -->

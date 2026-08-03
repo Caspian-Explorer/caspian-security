@@ -36,6 +36,20 @@ export interface SecurityRule {
   category: SecurityCategory;
   ruleType: RuleType;
   contextAware?: boolean;
+  /**
+   * Skip matches inside comments, but STILL match inside string literals.
+   *
+   * Distinct from `contextAware`, which suppresses comments *and* strings
+   * *and* JSX text. Some rules must keep matching inside strings to work
+   * at all — DEP001 hunts for `"^1.2.3"` in package.json, which is a
+   * string literal — so `contextAware` would silently disable them. This
+   * flag gives the narrow "commented-out code isn't running code"
+   * behaviour without that risk.
+   *
+   * Deliberately NOT applied to secret-value detectors: a credential
+   * pasted into a comment is still a leaked credential.
+   */
+  skipComments?: boolean;
   negativePatterns?: (RegExp | string)[];
   suppressIfNearby?: RegExp[];
   /**

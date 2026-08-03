@@ -157,6 +157,9 @@ interface SecurityRule {
   category: SecurityCategory;             // 1 of 14 categories
   ruleType: RuleType;                     // CodeDetectable, Informational, ProjectAdvisory
   contextAware?: boolean;                 // Skip matches in comments/strings/JSX
+  skipComments?: boolean;                 // Skip comments only — strings stay matchable
+  confidence?: ConfidenceLevel;           // Author-declared base confidence
+  suppressNearbyWindow?: number;          // ± lines scanned by suppressIfNearby (default 3)
   negativePatterns?: (RegExp | string)[]; // Suppress if safe pattern on same line
   suppressIfNearby?: RegExp[];            // Suppress if safe pattern within ±3 lines
   filePatterns?: {

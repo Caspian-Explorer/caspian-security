@@ -1,4 +1,4 @@
-import { SecurityRule, SecurityCategory } from '../types';
+import { SecurityRule, SecurityCategory, RuleType } from '../types';
 import { authRules } from './authRules';
 import { inputValidationRules } from './inputValidationRules';
 import { csrfRules } from './csrfRules';
@@ -65,12 +65,49 @@ const allRulesByCategory: Record<SecurityCategory, SecurityRule[]> = {
   ],
 };
 
+/**
+ * Rules that must keep matching inside comments even though they are
+ * Informational. A credential pasted into a comment is still a leaked
+ * credential, so secret-VALUE detectors are exempt from the blanket
+ * comment suppression below. (Reminder-style rules that merely mention a
+ * filename — e.g. CRED007 "is .env in .gitignore?" — are not exempt:
+ * matching the word `.env` inside prose is pure noise.)
+ */
+const SECRET_VALUE_RULE = /^(?:TOKEN|KT-CRED)/;
+
+/**
+ * Informational rules are advisory nudges about code that actually runs,
+ * so a match inside a comment is never actionable. Self-scanning Caspian's
+ * own source surfaced this: HDR005, API010 and CRED007 all fired on
+ * explanatory prose in code comments.
+ *
+ * Applied here, at the registry, rather than on ~65 individual rule
+ * definitions — so new Informational rules inherit it automatically.
+ * `skipComments` (unlike `contextAware`) leaves string literals matchable.
+ */
+function applyDefaultCommentSuppression(rules: SecurityRule[]): SecurityRule[] {
+  return rules.map(rule => {
+    if (rule.ruleType !== RuleType.Informational) { return rule; }
+    if (rule.contextAware || rule.skipComments) { return rule; }
+    if (SECRET_VALUE_RULE.test(rule.code)) { return rule; }
+    return { ...rule, skipComments: true };
+  });
+}
+
+const resolvedRulesByCategory: Record<SecurityCategory, SecurityRule[]> =
+  Object.fromEntries(
+    Object.entries(allRulesByCategory).map(([cat, rules]) => [
+      cat,
+      applyDefaultCommentSuppression(rules),
+    ])
+  ) as Record<SecurityCategory, SecurityRule[]>;
+
 export function getAllRules(): SecurityRule[] {
-  return Object.values(allRulesByCategory).flat();
+  return Object.values(resolvedRulesByCategory).flat();
 }
 
 export function getRulesByCategory(category: SecurityCategory): SecurityRule[] {
-  return allRulesByCategory[category] || [];
+  return resolvedRulesByCategory[category] || [];
 }
 
 export function getRuleByCode(code: string): SecurityRule | undefined {
