@@ -4,6 +4,18 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [10.11.1] - 2026-08-03
+
+Documentation accuracy pass ahead of the Marketplace release — no behaviour change.
+
+### Fixed
+
+- **Marketplace listing understated the rule count** — the `package.json` `description` (the blurb shown on the VS Code Marketplace and Open VSX) advertised "295+ rules" and "28 provider-prefix secret detectors". Verified actuals: **299 rules** (291 pattern + 8 taint) and **29** provider-prefix detectors. Corrected in the description, `README.md`, `docs/USER_GUIDE.md` and `docs/user-guide.html`.
+- **User guides were pinned to v10.6.1** — five releases stale. Version badges, `--version` sample output, and the `code --install-extension caspian-security-<v>.vsix` example now reflect the current release.
+- **Copy-paste GitHub Action snippets pinned to old tags** — `README.md` pinned `@v10.2.0` and `.github/examples/caspian-scan.yml` pinned `@v9.3.0`. Both now point at the current release tag, so a user copying the snippet gets this version's engine.
+
+---
+
 ## [10.11.0] - 2026-08-02
 
 False-positive cleanup driven by dogfooding: every fix below came from running Caspian against its own source and triaging what it flagged. Measured effect on that self-scan: **197 → 165 findings (32 fewer false positives, ~16% less noise)** with no loss of true detections.

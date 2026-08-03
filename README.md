@@ -6,7 +6,7 @@ Context-aware security analysis for Visual Studio Code.
 
 ## Overview
 
-Caspian Security detects vulnerabilities, insecure coding patterns, and security best-practice violations across code AND infrastructure (Dockerfile, Terraform, Kubernetes YAML). It ships as a **VS Code extension** for inline feedback and as an **npm-installable CLI** for CI pipelines — both backed by the same 295+ rule engine, intra-file taint tracking, and provider-prefix secret detection.
+Caspian Security detects vulnerabilities, insecure coding patterns, and security best-practice violations across code AND infrastructure (Dockerfile, Terraform, Kubernetes YAML). It ships as a **VS Code extension** for inline feedback and as an **npm-installable CLI** for CI pipelines — both backed by the same 299-rule engine, intra-file taint tracking, and provider-prefix secret detection.
 
 What sets it apart: **context-aware intelligence**. The scanner classifies issues with confidence scores based on variable-source analysis, follows user input through function bodies to flag real dataflow bugs, and its AI fixes work on a per-invocation consent model with minimal-context default — no full file contents leave your workspace unless you opt in.
 
@@ -95,7 +95,7 @@ Run `caspian mcp-config --client <name>` to print the block with the right path.
 ### In GitHub Actions
 
 ```yaml
-- uses: Caspian-Explorer/caspian-security/.github/actions/scan@v10.2.0
+- uses: Caspian-Explorer/caspian-security/.github/actions/scan@v10.11.1
   with:
     path: .
     fail-on: error

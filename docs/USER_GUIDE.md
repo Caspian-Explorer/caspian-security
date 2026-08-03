@@ -1,8 +1,8 @@
 # Caspian Security — User Guide
 
-**Version 10.6.1** · Context-aware security scanning for VS Code **and** a standalone `caspian` CLI you can run anywhere.
+**Version 10.11.1** · Context-aware security scanning for VS Code **and** a standalone `caspian` CLI you can run anywhere.
 
-Caspian Security detects vulnerabilities, insecure patterns, and security best-practice violations across **code and infrastructure** — 295+ rules over 14 categories, intra-file taint tracking, provider-prefix secret detection, and a git-history secret scanner. The same engine powers four surfaces:
+Caspian Security detects vulnerabilities, insecure patterns, and security best-practice violations across **code and infrastructure** — 299 rules over 14 categories, intra-file taint tracking, provider-prefix secret detection, and a git-history secret scanner. The same engine powers four surfaces:
 
 | Surface | Use it when… |
 |---|---|
@@ -45,7 +45,7 @@ Or search **"Caspian Security"** in the Extensions sidebar. Cursor/Windsurf/VSCo
 From a local `.vsix` file:
 
 ```
-code --install-extension caspian-security-10.6.1.vsix
+code --install-extension caspian-security-10.11.1.vsix
 ```
 
 ### Command line (npm)
@@ -64,7 +64,7 @@ caspian --version
 ### Verify the install
 
 ```bash
-caspian --version      # → 10.6.1
+caspian --version      # → 10.11.1
 caspian --help         # full command list
 ```
 
@@ -270,7 +270,7 @@ Suppress false positives, team-shared and version-controlled. See [Configuration
 
 ## 5. AI agent integration
 
-The headline of 10.6.1: any AI coding agent can run Caspian **with zero setup inside the target repo**. Caspian runs via `npx`, and it **never writes files into a project it doesn't own** — you paste a small piece of text wherever *you* choose. There are two routes.
+The headline of 10.11.1: any AI coding agent can run Caspian **with zero setup inside the target repo**. Caspian runs via `npx`, and it **never writes files into a project it doesn't own** — you paste a small piece of text wherever *you* choose. There are two routes.
 
 ### Route 1 — one line in the agent's rules (any agent with a shell)
 
@@ -296,7 +296,7 @@ The pasted block instructs the agent to run the scan, **fix every `Error`-severi
 ```markdown
 ## Security scanning — Caspian Security
 
-Caspian Security is a standalone security scanner (295+ rules...). It needs no
+Caspian Security is a standalone security scanner (299 rules...). It needs no
 configuration in this repository.
 
 After you finish editing code in this project, run:
@@ -352,7 +352,7 @@ Transport is stdio; no network port is opened; no telemetry; no persistent state
 ### GitHub Actions
 
 ```yaml
-- uses: Caspian-Explorer/caspian-security/.github/actions/scan@v10.6.1
+- uses: Caspian-Explorer/caspian-security/.github/actions/scan@v10.11.1
   with:
     path: .
     fail-on: error
@@ -474,7 +474,7 @@ Caspian Security CLI — 15 finding(s) across 3 file(s)
 
 ## 9. Rule categories
 
-295+ rules across 14 categories, plus intra-file taint rules (`TAINT001`–`TAINT008`) and 28 provider-prefix secret detectors.
+299 rules across 14 categories, plus intra-file taint rules (`TAINT001`–`TAINT008`) and 29 provider-prefix secret detectors.
 
 | Category | Example coverage |
 |---|---|
