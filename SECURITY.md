@@ -45,14 +45,26 @@ Please include, to the extent you are able to share it:
 - The published VS Code extension
   (`CaspianTools.caspian-security` on the VS Code Marketplace, also published
   to Open VSX)
-- The CLI shipped with the extension (`out/cli/scan.js`,
-  `out/cli/checkUpdates.js`) and the reusable GitHub Action at
+- The CLI shipped with the extension (the unified `caspian` command and the
+  `out/cli/*.js` bins, including the agent-loop commands `scan-file`,
+  `ship-check`, `baseline accept`, and `init` — the one command that writes
+  into a user's repository) and the reusable GitHub Action at
   `.github/actions/scan`
+- The MCP server (`out/cli/mcpServer.js`) and every tool it exposes
+- The Claude Code plugin: the hook bundles under `plugin/hooks/` (code that
+  executes inside users' agent sessions on every file write), `hooks.json`,
+  and the plugin's bundled `.mcp.json`
 - Webview panels (results, AI settings, learning dashboard, task detail,
   welcome, task tree)
 - Code that handles API keys, telemetry, persisted scan state, and outbound
   HTTP (`aiFixService.ts`, `telemetryService.ts`, `fileStateTracker.ts`,
   `dependencyChecker.ts`)
+
+Reports that the agent loop's enforcement can be bypassed or silenced by
+the coding agent itself (e.g. a way for an agent to suppress findings,
+tamper with the loop-guard state, or slip a blocked write past the
+pre-write guard) are in scope and treated as security bugs, not rule
+false-negatives — see the threat model, adversary G.
 
 ## What's out of scope
 

@@ -21,6 +21,8 @@ What an attacker who compromises Caspian can obtain or influence.
 | **Scan results and learning data** (`resultsStore`, `fixTracker`, `fileStateTracker`, `fixPatternMemory`, `codebaseProfile`, `ruleIntelligenceStore`, `scanHistoryStore`) | Persisted under `context.storageUri`. As of v9.2.0, matched-text `pattern` fields are no longer persisted. |
 | **Outbound network capability** | Caspian can call three AI providers, one telemetry endpoint, and npm/OSV registries. Any of these could be pointed at an attacker. |
 | **The user's VS Code command surface** | A webview with unchecked `postMessage` could invoke arbitrary registered commands. |
+| **Agent-loop enforcement integrity** (v10.12.0+) | The hooks, `caspian.config.json`, `.caspianignore`, `.caspian/baseline.json`, and the loop-guard session state together decide what an AI agent gets away with writing. If any of them can be silently weakened, the scanner becomes decoration. |
+| **Execution inside users' agent sessions** (v10.12.0+) | The plugin's hook bundles run `node` on every file write in every session that installs the plugin. Whoever controls those bundles controls code execution on subscribers' machines. |
 
 ## 2. Trust boundaries
 
@@ -44,6 +46,21 @@ Where adversary-controlled data meets Caspian-controlled code.
 5. **Settings (`settings.json`).** Users can point `telemetryEndpoint` or
    `aiModel` anywhere — the telemetry endpoint is validated to be
    `https://` before use.
+6. **Hook stdin (v10.12.0+).** Each Claude Code hook receives one JSON
+   object on stdin whose `tool_input` is whatever the agent tried to
+   write — adversarial by definition. Hooks parse it defensively
+   ([src/hooks/hookIO.ts](src/hooks/hookIO.ts)): malformed input, unknown
+   tool shapes, and thrown errors all exit 0 (fail open) with no output.
+7. **Agent-writable guardrail files (v10.12.0+).** `caspian.config.json`,
+   `.caspianignore`, and `.caspian/baseline.json` live in the repo, so an
+   agent could in principle edit them to silence its own findings. See
+   mitigation G.
+8. **MCP tool arguments (v10.12.0+).** Paths arrive from the model;
+   handlers resolve and validate them (`validatePath`, existence/type
+   checks) before any filesystem access.
+9. **The plugin distribution channel (v10.12.0+).** The plugin installs
+   from this git repository with pre-built, committed hook bundles — the
+   repo itself is the supply chain. See adversary B.
 
 ## 3. Adversaries we model
 
@@ -85,6 +102,16 @@ man-in-the-middle on the provider connection.
 Any defence-in-depth scenario where a webview is compromised and sends
 unexpected `postMessage`s.
 
+### G. The coding agent in the loop (v10.12.0+)
+
+The AI agent whose writes Caspian polices. Not malicious in the classic
+sense, but *misaligned by incentive*: a finding that blocks its task is an
+obstacle, and an agent will try the cheapest path around an obstacle —
+adding an ignore rule, accepting a baseline, relaxing `blockOn`, editing
+the loop-guard state, or phrasing a write so the guard doesn't match.
+Prompt-injected agents (a hostile workspace instructing the agent to
+disable the scanner) collapse into this same adversary.
+
 ## 4. Mitigations
 
 Numbered to line up with the adversaries above.
@@ -112,6 +139,13 @@ Numbered to line up with the adversaries above.
   signed VSIX so consumers can verify parity.
 - The project's own CI runs `caspian-scan` against itself on every push
   ([`.github/workflows/self-scan.yml`](.github/workflows/self-scan.yml)).
+- The plugin's hook bundles (`plugin/hooks/*.js`) are committed **unminified**
+  so they are reviewable in diffs, and are regenerated only by
+  `npm run build:plugin` from sources in `src/hooks/`. A marketplace entry
+  can be pinned to a tag (`#vX.Y.Z`) by consumers who don't want to track
+  `main`. Note the widened blast radius: compromising this repo now means
+  code execution in every subscribed agent session, not just a bad scan —
+  which is why bundle diffs get the same review bar as source.
 - Reporting: see [SECURITY.md](SECURITY.md).
 
 ### C. Hostile local process
@@ -154,6 +188,29 @@ Numbered to line up with the adversaries above.
 - No `enableCommandUris`, no `retainContextWhenHidden` for panels that
   don't need it.
 
+### G. The coding agent in the loop
+
+- **No self-silencing tools.** The MCP server deliberately exposes no
+  `suppress_finding`, `accept_baseline`, or config-mutation tool. Baseline
+  acceptance is CLI-only (`caspian baseline accept`) — a human action.
+- **Guardrail-file writes require human approval.** The pre-write guard
+  answers `ask` (not allow) when the agent targets `caspian.config.json`,
+  `.caspianignore`, or `.caspian/baseline.json`
+  ([src/hooks/preWriteGuard.ts](src/hooks/preWriteGuard.ts)).
+- **Config can relax, never disarm.** `caspian.config.json` may reduce
+  what's reported, but `critical` findings (live credentials, wide-open
+  platform rules) block regardless of `blockOn`
+  ([src/agentLoop/severity.ts](src/agentLoop/severity.ts)).
+- **Loop-guard state lives outside the repository**
+  (`CLAUDE_PLUGIN_DATA` or the OS temp dir), so it is not editable through
+  the guarded Write/Edit path.
+- **Defence in depth across three hooks.** A write that slips past the
+  narrow pre-write guard is caught by the post-write scan; a finding the
+  agent ignores mid-turn is caught by the stop gate before the turn ends.
+- **Findings are phrased as facts, not instructions**, so hostile file
+  content echoed in a report cannot masquerade as system commands to the
+  agent reading it.
+
 ## 5. Known residual risk
 
 Things we know we haven't mitigated fully.
@@ -177,6 +234,22 @@ Things we know we haven't mitigated fully.
 - **Telemetry session ID** rotates daily but could correlate activity
   within a 24-hour window. The payload contains no file paths or
   identifiers, so the correlation value is low.
+- **Hooks fail open by design** (v10.12.0+). Any hook crash, timeout, or
+  missing engine exits 0 silently — a broken scanner must never break the
+  user's session, so a crash also silently stops enforcement. Accepted
+  trade-off: the alternative (fail closed) turns every Caspian bug into a
+  denial of service on the user's coding loop.
+- **The hooks only guard the Write/Edit tool path** (v10.12.0+). An agent
+  that writes a file via `Bash` (`echo … > file`, `sed -i`, a script)
+  bypasses both the pre-write guard and the post-write scan. The stop gate
+  partially compensates — it scans the whole working tree regardless of
+  how files got there — but only blocks on `critical`, and only once per
+  finding set. Hooking `Bash` was explicitly rejected for v1 (far too
+  noisy); revisit if bypass-via-shell shows up in practice.
+- **Loop-guard state is only as private as the OS temp dir.** Another
+  local process (or an agent using `Bash` against the temp path) could
+  edit the session state to pre-exhaust block counters. Low value: doing
+  so downgrades blocks to visible context, it doesn't hide findings.
 
 ## 6. Assumptions we make
 
@@ -194,3 +267,4 @@ Things we know we haven't mitigated fully.
 | Date | Change |
 |---|---|
 | 2026-04-21 | Initial version (v9.3.0) |
+| 2026-08-03 | Agent-loop integration (v10.12.0): new assets (enforcement integrity, in-session execution), trust boundaries 6–9 (hook stdin, guardrail files, MCP tool args, plugin supply chain), adversary G (the coding agent) with mitigations, and fail-open / Bash-bypass / state-tampering residual risks. |

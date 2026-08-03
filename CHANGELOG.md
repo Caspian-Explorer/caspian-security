@@ -4,6 +4,17 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [10.12.1] - 2026-08-03
+
+Security-documentation catch-up for the agent-loop release — no behaviour change. THREAT_MODEL.md's own rule says design changes update it in the same PR; 10.12.0 missed that, this closes the gap.
+
+### Changed
+
+- **[THREAT_MODEL.md](THREAT_MODEL.md)** — modeled the agent-loop surface added in 10.12.0: two new assets (enforcement integrity, execution inside subscribers' agent sessions), trust boundaries 6–9 (hook stdin, agent-writable guardrail files, MCP tool arguments, the plugin's repo-as-supply-chain distribution), a new adversary class **G — the coding agent in the loop** (misaligned by incentive, includes prompt-injected agents) with its mitigations, and three honestly-stated residual risks: hooks fail open by design, Bash writes bypass the Write/Edit hooks (stop gate partially compensates), and loop-guard state is only as private as the OS temp dir.
+- **[SECURITY.md](SECURITY.md)** — scope now includes the MCP server, the plugin hook bundles, and the agent-loop CLI commands (`scan-file`, `ship-check`, `baseline accept`, `init`); clarified that agent-driven enforcement bypasses are security bugs, not rule false-negatives.
+
+---
+
 ## [10.12.0] - 2026-08-03
 
 Agent-loop integration: Caspian now runs INSIDE AI-agent coding loops (Claude Code, Cursor, and any MCP client), so vulnerabilities in AI-generated code are caught and fixed by the agent before a human ever sees them.
