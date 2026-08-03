@@ -26,7 +26,9 @@ const DOCKERFILE_ONLY = {
   include: [/(^|[\\/])(?:Dockerfile|Containerfile|dockerfile)(?:\..*)?$/i, /\.dockerfile$/i],
 };
 
-export const dockerfileRules: SecurityRule[] = [
+// Exact-config-key matches are rarely accidental: CodeDetectable rules in
+// this family carry base confidence 'critical'.
+export const dockerfileRules: SecurityRule[] = ([
   {
     code: 'DOCKER001',
     message: 'Base image uses the mutable `latest` tag or no tag — build is not reproducible',
@@ -59,6 +61,10 @@ export const dockerfileRules: SecurityRule[] = [
     suppressIfNearby: [
       /^\s*USER\s+(?!root\b|0\b)/im,
     ],
+    // USER legitimately appears near the END of a Dockerfile while FROM is
+    // line 1 — the default ±3-line window meant this rule fired on every
+    // Dockerfile that DID set a non-root user.
+    suppressNearbyWindow: 300,
     filePatterns: DOCKERFILE_ONLY,
     suggestion:
       'Add `USER appuser` (or a numeric UID) before the final CMD/ENTRYPOINT. Running as root inside ' +
@@ -157,4 +163,6 @@ export const dockerfileRules: SecurityRule[] = [
     category: cat,
     ruleType,
   },
-];
+] as SecurityRule[]).map(rule =>
+  rule.ruleType === RuleType.CodeDetectable ? { ...rule, confidence: 'critical' as const } : rule
+);

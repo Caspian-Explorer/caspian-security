@@ -108,13 +108,13 @@ Findings land in the GitHub Security tab automatically. The npm CLI and the exte
 
 ## Key Capabilities
 
-- **One-click quick-fix lightbulb** -- 13 mechanical remediations (Kubernetes `privileged: true→false`, Terraform `publicly_accessible = false`, `jwt.verify` gets `algorithms: ['RS256']`, `yaml.unsafe_load → safe_load`, etc.) applied instantly via Ctrl+. No AI round-trip, fully reversible with undo
-- **Context-aware analysis** -- classifies issues by variable source (hardcoded, static, or dynamic) with confidence badges
+- **One-click quick-fix lightbulb** -- 18 mechanical remediations (Kubernetes `privileged: true→false`, Terraform public-access flags, `jwt.verify` gets `algorithms: ['RS256']`, `yaml.unsafe_load → safe_load`, `md5/sha1 → sha256`, `http:// → https://`, Dockerfile `ADD → COPY` and hardened package installs, etc.) applied instantly via Ctrl+. No AI round-trip, fully reversible with undo
+- **Context-aware analysis** -- every finding carries a confidence badge (Critical / Verify needed / Likely safe), resolved from variable-source heuristics, per-rule base confidence (provider tokens and exact IaC keys are Critical), and learned behavior
 - **AI fixes with function-level understanding** -- sends the entire enclosing function and traced variable definitions to the AI, not just 20 lines of context
-- **164 security rules** across 14 categories with actionable fix suggestions
+- **299 security rules** across 14 categories with actionable fix suggestions
 - **Real-time analysis** -- checks code as you type with a 1-second debounce to avoid lag
 - **Full workspace scanning** -- scans all project files on disk, not just open tabs
-- **8 languages supported** -- JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust
+- **9 languages + infrastructure files** -- JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin, plus Dockerfile, Terraform, and Kubernetes/YAML manifests
 - **Team-shareable `.caspianignore`** -- persist ignore decisions to a version-controlled file with optional reasons
 - **SARIF v2.1.0 export** -- upload scan results directly to GitHub Security Alerts
 - **Per-category toggles** -- enable or disable each security category independently
@@ -131,7 +131,7 @@ Findings land in the GitHub Security tab automatically. The npm CLI and the exte
 - **Triage Mode** -- guided walkthrough of all pending issues with one-click AI Fix, Ignore, or False Positive actions
 - **PR-Scoped Scanning** -- scan only files changed on the current branch vs main/master for focused code review
 - **Bulk Actions** -- "Ignore All" by rule code and "Why?" inline explanations on every finding
-- **Test Suite** -- 230+ unit tests validating all 164 rules, the ignore system, and the scoring algorithm
+- **Test Suite** -- 1,100+ unit tests validating the rules, the shared scan engine (vulnerable + clean corpora), the ignore system, and the scoring algorithm
 - **CI Pipeline** -- GitHub Actions with lint, compile, test on Node 18/20, and VSIX packaging
 
 ---
@@ -170,7 +170,7 @@ Findings land in the GitHub Security tab automatically. The npm CLI and the exte
 | Dependencies & Supply Chain       | 6     | DEP001--DEP006   | Version pinning, patching SLA, auditing, transitive deps       |
 | Infrastructure & Deployment       | 13    | INFRA001--008, HDR001--005 | Env separation, debug mode, security headers, Cache-Control |
 
-**Total: 164 rules** (93 code-detectable + 71 informational)
+**Total: 299 rules** — 291 pattern rules (215 code-detectable + 65 informational + 11 project advisories) + 8 taint-tracking rules
 
 ---
 
@@ -280,19 +280,22 @@ If minimal context isn't enough — e.g., the fix needs awareness of code furthe
 
 ## Confidence Scoring
 
-Each detected issue is analyzed for a **confidence level** based on lightweight variable-source heuristics:
+**Every finding carries a confidence level.** It is resolved in three steps: per-match variable-source heuristics first, then the rule's own base confidence (provider-prefix tokens and exact infrastructure config keys are inherently Critical), then a default by rule type (code detections → Verify Needed, informational reminders → Safe).
 
 | Level | Badge | Meaning | Example |
 |-------|-------|---------|---------|
-| Critical | Red | Hardcoded secret as a string literal | `const password = "EXAMPLE_PASSWORD"` |
-| Safe | Green | Static string with no dynamic input | `const query = "SELECT * FROM users"` |
-| Verify Needed | Orange | Dynamic value via concatenation or interpolation | `const query = "SELECT * FROM " + userInput` |
+| Critical | Red | Near-certain real issue | `const password = "EXAMPLE_PASSWORD"`, a Slack `xoxb-…` token, `privileged: true` |
+| Safe | Green | Likely fine / low priority | parameterized query, informational reminders |
+| Verify Needed | Orange | Needs human judgement | `const query = "SELECT * FROM " + userInput` |
 
 Confidence badges appear:
 - In the **Results Panel** next to the Verify button
 - In **VS Code diagnostics** as a prefix (e.g., `[Critical] [Secrets] CRED001: ...`)
+- In CLI `--format json` output as the `confidence` field
 
-Confidence is only shown when the heuristic is confident in its classification. Issues without a clear signal show no badge.
+The adaptive learning engine then shifts levels over time — rules you repeatedly dismiss as false positives get downgraded; rules whose findings you consistently fix get upgraded.
+
+**Commented-out code doesn't raise findings.** Advisory/reminder rules skip matches inside comments, so prose and disabled code stay quiet. Secret detection is deliberately exempt — a credential pasted into a comment is still a leaked credential, and Caspian will still report it.
 
 ---
 

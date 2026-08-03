@@ -109,9 +109,15 @@ export const loggingRules: SecurityRule[] = [
     code: 'LOG009',
     message: 'Reminder: Log data export and API key change operations',
     severity: SecuritySeverity.Info,
+    // The bare `export` alternation matched the TypeScript/ES `export`
+    // keyword, so any `export … data…` declaration tripped it — measured
+    // at 22% of Caspian's own source files. Anchor to an actual export
+    // *operation* (a call or a route/handler name) instead of the keyword.
     patterns: [
-      /(?:export|download).*(?:data|report|csv|pdf)/i,
-      /(?:rotate|regenerate|revoke).*(?:key|token|secret)/i,
+      /\b(?:export|download)(?:ed|ing|s)?\s*(?:data|report|csv|pdf)\w*\s*\(/i,
+      /["'`][^"'`]*\/(?:export|download)\b[^"'`]*["'`]/i,
+      /\b(?:exportData|downloadData|exportReport|downloadReport|generateReport)\b/i,
+      /(?:rotate|regenerate|revoke)\w*\s*\(\s*.*(?:key|token|secret)/i,
     ],
     suggestion: 'Log all data export operations and API key lifecycle events (creation, rotation, revocation) for compliance auditing',
     category: SecurityCategory.LoggingMonitoring,

@@ -58,6 +58,7 @@ export class TelemetryService implements vscode.Disposable {
   private timer: ReturnType<typeof setInterval> | undefined;
   private dirty = false;
   private sessionId: string;
+  private changeListener: vscode.Disposable;
 
   constructor(
     private ruleIntelligence: RuleIntelligenceStore,
@@ -68,7 +69,7 @@ export class TelemetryService implements vscode.Disposable {
     this.sessionId = crypto.randomUUID();
 
     // Mark dirty when rule intelligence changes
-    this.ruleIntelligence.onDidChange(() => {
+    this.changeListener = this.ruleIntelligence.onDidChange(() => {
       this.dirty = true;
     });
   }
@@ -266,6 +267,7 @@ export class TelemetryService implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.changeListener.dispose();
     this.stopSchedule();
     // Attempt final send on deactivation
     if (this.isEnabled() && this.dirty) {

@@ -72,6 +72,8 @@ const KNOWN_SAFE_FUNCTIONS: Record<string, string[]> = {
 export class CodebaseProfile implements vscode.Disposable {
   private data: CodebaseProfileData;
   private persistence: PersistenceManager;
+  /** Per-rule cache of qualifying safe patterns — hasLearnedSuppression runs for every rule match. */
+  private suppressionCache = new Map<string, SafePattern[]>();
 
   constructor() {
     this.persistence = PersistenceManager.getInstance();
@@ -83,6 +85,7 @@ export class CodebaseProfile implements vscode.Disposable {
       STORE_FILE,
       { version: 1, safePatterns: [], hotZones: [], postureTrend: [], regressions: [] }
     );
+    this.suppressionCache.clear();
   }
 
   // ---------------------------------------------------------------------------
@@ -95,7 +98,7 @@ export class CodebaseProfile implements vscode.Disposable {
    * with the rule that was being fixed.
    */
   learnFromAIFix(ruleCode: string, afterLine: string): void {
-    for (const [funcName, prefixes] of Object.entries(KNOWN_SAFE_FUNCTIONS)) {
+    for (const funcName of Object.keys(KNOWN_SAFE_FUNCTIONS)) {
       if (afterLine.includes(funcName)) {
         this.addSafePattern(funcName, ruleCode, 'ai_fix');
       }
@@ -108,7 +111,7 @@ export class CodebaseProfile implements vscode.Disposable {
    * If the dismissed line contains a known safe function, learn the association.
    */
   learnFromFalsePositive(ruleCode: string, lineText: string): void {
-    for (const [funcName, prefixes] of Object.entries(KNOWN_SAFE_FUNCTIONS)) {
+    for (const funcName of Object.keys(KNOWN_SAFE_FUNCTIONS)) {
       if (lineText.includes(funcName)) {
         this.addSafePattern(funcName, ruleCode, 'user_fp');
       }
@@ -133,6 +136,7 @@ export class CodebaseProfile implements vscode.Disposable {
   }
 
   private addSafePattern(functionName: string, ruleCode: string, source: SafePattern['source']): void {
+    this.suppressionCache.clear();
     const existing = this.data.safePatterns.find(p => p.functionName === functionName);
     if (existing) {
       if (!existing.neutralizesRules.includes(ruleCode)) {
@@ -160,12 +164,17 @@ export class CodebaseProfile implements vscode.Disposable {
    * Looks for known safe functions on the matched line and surrounding lines.
    */
   hasLearnedSuppression(ruleCode: string, lineText: string, lines: string[], lineNum: number): boolean {
-    // Get safe patterns that could neutralize this rule
-    const relevant = this.data.safePatterns.filter(p =>
-      p.confidence >= 0.6 && p.observedCount >= 2 &&
-      (p.neutralizesRules.includes(ruleCode) ||
-       p.neutralizesRules.some(r => ruleCode.startsWith(r)))
-    );
+    // Get safe patterns that could neutralize this rule (cached per rule
+    // code — this runs for every confirmed rule match during a scan)
+    let relevant = this.suppressionCache.get(ruleCode);
+    if (!relevant) {
+      relevant = this.data.safePatterns.filter(p =>
+        p.confidence >= 0.6 && p.observedCount >= 2 &&
+        (p.neutralizesRules.includes(ruleCode) ||
+         p.neutralizesRules.some(r => ruleCode.startsWith(r)))
+      );
+      this.suppressionCache.set(ruleCode, relevant);
+    }
 
     if (relevant.length === 0) { return false; }
 
@@ -193,7 +202,7 @@ export class CodebaseProfile implements vscode.Disposable {
   rebuildHotZones(ruleIntelligence: RuleIntelligenceStore): void {
     const dirStats = new Map<string, { confirmed: number; total: number; fps: number }>();
 
-    for (const [, stats] of Object.entries(ruleIntelligence.getAllStats())) {
+    for (const stats of Object.values(ruleIntelligence.getAllStats())) {
       for (const [pattern, patternStats] of Object.entries(stats.byFilePattern)) {
         const existing = dirStats.get(pattern) || { confirmed: 0, total: 0, fps: 0 };
         existing.total += patternStats.detections;
@@ -201,19 +210,8 @@ export class CodebaseProfile implements vscode.Disposable {
         dirStats.set(pattern, existing);
       }
     }
-
-    // Add confirmed counts from fix data
-    for (const [, stats] of Object.entries(ruleIntelligence.getAllStats())) {
-      for (const [langOrPattern, langStats] of Object.entries(stats.byLanguage)) {
-        // byLanguage uses languageId not file patterns, skip
-      }
-      // Use rule-level stats for confirmed issues
-      for (const [pattern, patternStats] of Object.entries(stats.byFilePattern)) {
-        const existing = dirStats.get(pattern);
-        if (existing) {
-          existing.confirmed = existing.total - existing.fps;
-        }
-      }
+    for (const s of dirStats.values()) {
+      s.confirmed = s.total - s.fps;
     }
 
     this.data.hotZones = Array.from(dirStats.entries())

@@ -12,6 +12,14 @@ export interface FileState {
   lastScannedAt: string;
   languageId: string;
   cachedIssues: SecurityIssue[];
+  /**
+   * True only when the file was scanned during THIS session. Entries
+   * restored from disk have empty `cachedIssues` (issues are never
+   * persisted — see buildSerialisableStore), so their cache must not be
+   * treated as "zero issues": that would silently report stale-clean
+   * results for every unchanged file after a restart.
+   */
+  sessionScanned: boolean;
 }
 
 export interface FileStateStore {
@@ -49,7 +57,10 @@ export class FileStateTracker implements vscode.Disposable {
     // change-detection cache (hash/mtime/size) is the only thing we carry
     // forward; issues repopulate as each file is scanned this session.
     this.states = new Map(
-      Object.entries(store.files).map(([k, s]) => [k, { ...s, cachedIssues: [] }])
+      Object.entries(store.files).map(([k, s]) => [
+        k,
+        { ...s, cachedIssues: [], sessionScanned: false },
+      ])
     );
   }
 
@@ -93,11 +104,17 @@ export class FileStateTracker implements vscode.Disposable {
     relativePath: string,
     fsPath: string,
     languageId: string,
-    issues: SecurityIssue[]
+    issues: SecurityIssue[],
+    text?: string
   ): Promise<void> {
     try {
       const stat = fs.statSync(fsPath);
-      const hash = this.computeHash(fsPath);
+      // Hash the already-loaded document text when the caller has it —
+      // re-reading the file from disk just to hash it doubled the I/O of
+      // every scan.
+      const hash = text !== undefined
+        ? crypto.createHash('sha256').update(text, 'utf-8').digest('hex')
+        : this.computeHash(fsPath);
 
       this.states.set(relativePath, {
         relativePath,
@@ -107,6 +124,7 @@ export class FileStateTracker implements vscode.Disposable {
         lastScannedAt: new Date().toISOString(),
         languageId,
         cachedIssues: issues,
+        sessionScanned: true,
       });
       this.markDirty();
     } catch (error) {
@@ -114,8 +132,17 @@ export class FileStateTracker implements vscode.Disposable {
     }
   }
 
+  /**
+   * Returns cached issues only for files scanned during this session.
+   * Entries restored from a previous session return `undefined` so the
+   * caller re-scans them — their issues were never persisted.
+   */
   getCachedIssues(relativePath: string): SecurityIssue[] | undefined {
-    return this.states.get(relativePath)?.cachedIssues;
+    const state = this.states.get(relativePath);
+    if (!state || !state.sessionScanned) {
+      return undefined;
+    }
+    return state.cachedIssues;
   }
 
   getContentHash(relativePath: string): string | undefined {
@@ -154,7 +181,7 @@ export class FileStateTracker implements vscode.Disposable {
   private buildSerialisableStore(): FileStateStore {
     const files: Record<string, FileState> = {};
     for (const [key, state] of this.states) {
-      files[key] = { ...state, cachedIssues: [] };
+      files[key] = { ...state, cachedIssues: [], sessionScanned: false };
     }
     return { version: 1, files };
   }
@@ -166,9 +193,11 @@ export class FileStateTracker implements vscode.Disposable {
 
   private markDirty(): void {
     this.dirty = true;
+    // Pass a supplier so the (potentially large) store is snapshotted once
+    // when the debounced write fires, not on every scanned file.
     this.persistence.scheduleWrite(
       STORE_FILE,
-      this.buildSerialisableStore(),
+      () => this.buildSerialisableStore(),
       2000
     );
   }

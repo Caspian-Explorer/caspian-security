@@ -94,8 +94,14 @@ export const secretsRules: SecurityRule[] = [
     code: 'CRED007',
     message: 'Sensitive file reference detected - ensure it is in .gitignore',
     severity: SecuritySeverity.Info,
+    // `\.env\b` alone matched PROPERTY ACCESS, not just filenames — so
+    // `process.env.FOO` and `vscode.env.clipboard` tripped it in virtually
+    // every Node/TS project. The lookbehind requires the dot to start a
+    // path segment (quote, slash, whitespace, start of line) rather than
+    // follow an identifier, so `.env` / `./.env` / `".env.local"` still
+    // match while `process.env` no longer does.
     patterns: [
-      /\.env\b/,
+      /(?<![\w$)\]])\.env(?:\.\w+)?\b/,
       /credentials\.json/,
       /serviceAccountKey/i,
     ],

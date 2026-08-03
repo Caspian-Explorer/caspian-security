@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/Caspian-Explorer/caspian-security"
   },
-  "version": "10.7.3",
+  "version": "10.11.0",
   "publisher": "CaspianTools",
   "license": "MIT",
   "engines": {
@@ -42,7 +42,10 @@
     "onLanguage:php",
     "onLanguage:go",
     "onLanguage:rust",
-    "onLanguage:kotlin"
+    "onLanguage:kotlin",
+    "onLanguage:yaml",
+    "onLanguage:terraform",
+    "onLanguage:dockerfile"
   ],
   "main": "./out/extension.js",
   "bin": {
@@ -393,9 +396,12 @@
             "php",
             "go",
             "rust",
-            "kotlin"
+            "kotlin",
+            "yaml",
+            "terraform",
+            "dockerfile"
           ],
-          "description": "Languages to check"
+          "description": "Languages to check (yaml covers Kubernetes manifests; dockerfile covers Dockerfile/Containerfile)"
         },
         "caspianSecurity.enableAuthAccessControl": {
           "type": "boolean",
@@ -576,6 +582,7 @@
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts",
     "test": "jest --forceExit",
+    "test:coverage": "jest --coverage --forceExit",
     "check-updates": "npm run compile && node out/cli/checkUpdates.js",
     "scan": "npm run compile && node out/cli/scan.js",
     "self-scan": "npm run compile && node out/cli/scan.js . --format text --fail-on error --exclude out,node_modules,.git,coverage",

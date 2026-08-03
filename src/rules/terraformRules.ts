@@ -20,7 +20,9 @@ const TERRAFORM_ONLY = {
   include: [/\.tf(vars)?$/i, /\.hcl$/i],
 };
 
-export const terraformRules: SecurityRule[] = [
+// Exact-config-key matches are rarely accidental: CodeDetectable rules in
+// this family carry base confidence 'critical'.
+export const terraformRules: SecurityRule[] = ([
   {
     code: 'TF001',
     message: 'Security group allows ingress from 0.0.0.0/0 — exposed to the entire internet',
@@ -99,11 +101,21 @@ export const terraformRules: SecurityRule[] = [
     code: 'TF005',
     message: 'Storage resource has no encryption_at_rest / server_side_encryption configured',
     severity: SecuritySeverity.Warning,
+    // Matching is line-scoped, so a lookahead across the resource body can
+    // never see the attributes; suppress via the nearby-lines window
+    // instead. The aws_s3_bucket pattern was dropped entirely: since AWS
+    // provider v4 the SSE config is a separate resource type, and S3
+    // buckets are encrypted at rest by default (Jan 2023) — flagging every
+    // bucket declaration was pure noise.
     patterns: [
-      /\bresource\s+["']aws_s3_bucket["'](?![\s\S]{0,400}server_side_encryption_configuration)/,
-      /\bresource\s+["']aws_ebs_volume["'](?![\s\S]{0,400}encrypted\s*=\s*true)/,
-      /\bresource\s+["']aws_db_instance["'](?![\s\S]{0,600}storage_encrypted\s*=\s*true)/,
+      /\bresource\s+["']aws_ebs_volume["']/,
+      /\bresource\s+["']aws_db_instance["']/,
     ],
+    suppressIfNearby: [
+      /\bencrypted\s*=\s*true\b/,
+      /\bstorage_encrypted\s*=\s*true\b/,
+    ],
+    suppressNearbyWindow: 15,
     filePatterns: TERRAFORM_ONLY,
     suggestion:
       'Every at-rest store should be encrypted. Enable `server_side_encryption_configuration` on S3, ' +
@@ -189,4 +201,6 @@ export const terraformRules: SecurityRule[] = [
     category: cat,
     ruleType,
   },
-];
+] as SecurityRule[]).map(rule =>
+  rule.ruleType === RuleType.CodeDetectable ? { ...rule, confidence: 'critical' as const } : rule
+);

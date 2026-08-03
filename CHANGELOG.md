@@ -4,6 +4,100 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [10.11.0] - 2026-08-02
+
+False-positive cleanup driven by dogfooding: every fix below came from running Caspian against its own source and triaging what it flagged. Measured effect on that self-scan: **197 → 165 findings (32 fewer false positives, ~16% less noise)** with no loss of true detections.
+
+### Added
+
+- **`skipComments` rule option** — suppresses matches inside comments while **still matching string literals**. This is deliberately narrower than the existing `contextAware`, which also suppresses strings and would silently break rules that must match string content (DEP001 exists to find `"^1.2.3"` inside `package.json`). Commented-out code isn't running code, so it shouldn't raise behavioural findings.
+- **Applied by default to Informational rules** at the registry (**[src/rules/index.ts](src/rules/index.ts)**), so new reminder rules inherit it automatically — 65 rules in total. **Provider-token detectors are explicitly exempt**: a credential pasted into a comment is still a leaked credential, and a regression test asserts that a token in a `//` comment is still reported.
+- `falsePositiveTuning.test.ts` — 15 regression tests pinning every case below, including the "secret in a comment is still found" guarantee and the "string literals stay matchable" distinction.
+
+### Fixed
+
+- **`CRED007` matched property access, not just filenames** — the pattern `\.env\b` matched `process.env.API_KEY` and `vscode.env.clipboard`, so it fired in virtually every Node/TypeScript project. Now requires `.env` to begin a path segment: `.env`, `./.env` and `".env.local"` still match; `process.env` no longer does.
+- **`LOG009` matched the `export` keyword** — its `(export|download).*(data|report|csv|pdf)` pattern meant ordinary TypeScript declarations like `export function scanFileBatch(data: …)` were flagged as data-export operations, firing in **22% of Caspian's own source files**. Retargeted at genuine export *operations* (`exportData()`, `/api/export` routes) rather than the language keyword.
+- **`DEP001` / `DEP002` were ungated** — dependency-manifest rules (looking for `"^1.2.3"`, `"dependencies":`, `require(`) ran against every source file, so DEP001 flagged the `'*'` literals inside a glob parser and DEP002 flagged every `require()` call. Both are now restricted via `filePatterns` to actual manifests (`package.json`, `requirements.txt`, `go.mod`, `Cargo.toml`, `pom.xml`, `Gemfile`, `composer.json`, …).
+- **`HDR005`, `API010`, `CRED007`, `BIZ007` fired on code comments** — e.g. the prose `res.json(token)` and `req.params.id` inside explanatory comments. Resolved by the `skipComments` default above.
+
+---
+
+## [10.10.1] - 2026-08-01
+
+Fixes a silent detection failure on Windows, found by the `windows-latest` CI leg added in 10.9.0 on its very first run.
+
+### Fixed
+
+- **CRLF files silently lost findings** — Git on Windows checks files out with CRLF by default, and the scan engine split on `\n`, leaving a trailing `\r` on every line. Any rule pattern anchored to end-of-line (`$`) then failed to match. On the vulnerable corpus this silently dropped `TAINT001`, `TAINT003`, `TAINT006` and `TAINT007` and produced a spurious `TAINT008` — i.e. Windows users with CRLF line endings were getting materially different, wrong results with no indication anything was missed. A new shared `normaliseLineEndings` helper (**[src/scanContext.ts](src/scanContext.ts)**) is now applied at every scan entry point: `scanFile`, `buildLineStates`, `runTaintAnalysis`, the analyzer's project-advisory pass, and the git-history secret scanner's diff-line reader. Only `\r\n` is rewritten — never a lone `\r` — so line counts and column offsets are preserved exactly and diagnostics still point at the right place.
+- New `lineEndings.test.ts` asserts that every vulnerable- and clean-corpus fixture produces **identical findings at identical line and column** under CRLF, plus unit coverage for the helper, `buildLineStates`, and the taint engine. Windows CI deliberately keeps its CRLF checkout, so this path is exercised on every run.
+- **AI-fix path on CRLF files** — the same normalisation now applies where **[src/extension.ts](src/extension.ts)** extracts the offending line from a document. A trailing `\r` there leaked into the AI fix prompt and into the fix-pattern-memory cache key, which meant a fix learned in an LF file would never replay in a CRLF file (and vice versa).
+
+---
+
+## [10.10.0] - 2026-08-01
+
+Phase B, final batch: much wider rule test coverage, parallel CLI scanning for large repos, and a slimmer VSIX.
+
+### Added
+
+- **Parallel CLI scanning** — `caspian scan` now scans across worker threads on large file sets, with a new `--concurrency <n>` flag (defaults to the CPU count; small scans still run inline to avoid thread overhead). Output is byte-for-byte identical to the single-threaded scan (results are sorted by path). New shared `scanFileList` helper backs the sync scan, the worker, and the CLI so all three filter files identically.
+- **Rule behaviour coverage 44 → 109 codes** — three new vulnerable-corpus fixtures (`flask-service.py` for Python injection/deserialization/SSRF/XXE/LDAP/crypto, `webapp.js` for auth/CORS/CSRF/API/frontend, `MainActivity.kt` for the Android `KT-*` family) plus direct assertions for 9 provider-token (`TOKEN*`) shapes, all with confidence checks. Synthetic tokens are assembled at runtime so no token-shaped literal is committed.
+
+### Changed
+
+- **Smaller VSIX** — `tsconfig.json` no longer emits `.d.ts` declarations or `.js.map` source maps (this package is an app, not a typed library). The packaged extension dropped from 330 files / ~625 KB to 118 files / ~432 KB. Neither is needed by the extension host or the CLI at runtime; flip the flags on locally for debugging.
+
+---
+
+## [10.9.0] - 2026-08-01
+
+Phase B of the trust roadmap: every finding now carries a confidence rating (previously ~2 of 291 rules produced one on a fresh install), five new one-click fixes (13 → 18), CI now tests on Windows with a coverage gate, and the results panel stays responsive on scans with tens of thousands of findings.
+
+### Added
+
+- **Confidence on every finding** — confidence now resolves as: per-match variable-source heuristics → the rule's author-declared base confidence (new optional `confidence` field on `SecurityRule`) → a default by rule type (code detections → `verify-needed`, informational reminders → `safe`). All 29 provider-prefix TOKEN rules and every code-detectable Kubernetes/Terraform/Dockerfile rule carry base confidence `critical` — their patterns are essentially never accidental. The CLI's `--format json` exposes it as `confidence`. Covered by a new `confidence.test.ts` suite.
+- **Five new one-click quick fixes** (18 total): `ENC001` weak hash (`createHash('md5'|'sha1') → 'sha256'`, `hashlib.md5/sha1 → hashlib.sha256`), `ENC003` `http:// → https://` (never touches localhost), `TF002` S3 public-access-block flags (`block_public_acls = false → true` and friends), `DOCKER005` `ADD → COPY` for local paths (never URLs), `DOCKER006` `apt-get install` gains `--no-install-recommends` / `apk add` gains `--no-cache`.
+- **CI hardening** — the test matrix now includes `windows-latest` (the codebase has Windows path-normalisation logic that was only ever exercised on Linux) and Node 22, and runs `npm run test:coverage` with a coverage ratchet in `jest.config.js` (60% statements / 52% branches to start — raise as coverage grows, never lower).
+
+### Changed
+
+- **Results panel scales to huge scans** — the findings table renders 500 rows initially with a "Show more" row (rendering everything froze the webview on 10k+ findings), and all row/button clicks go through one delegated listener instead of thousands of per-element listeners re-attached on every refresh.
+
+---
+
+## [10.8.0] - 2026-08-01
+
+Trust release: fixes a bug that silently reported unchanged files as clean after every VS Code restart, stops learning data from being lost on shutdown, makes the advertised Dockerfile/Terraform/Kubernetes rules actually run inside the editor, and consolidates the three divergent copies of the scan engine into one shared implementation covered by a greatly expanded test suite (1,134 tests, up from 1,046).
+
+### Fixed
+
+- **Silent false negatives after restart** — **[src/fileStateTracker.ts](src/fileStateTracker.ts)**, **[src/extension.ts](src/extension.ts)**: cached issues are never persisted (by design, to avoid writing matched secrets to disk), but entries restored from a previous session still answered the cache lookup with an empty issue list. On the first workspace scan after any VS Code restart, every unchanged file was therefore reported as having zero issues without being scanned. Restored entries now force a real re-scan; covered by a restart-simulation regression test.
+- **Learning data lost on shutdown** — **[src/persistenceManager.ts](src/persistenceManager.ts)**: `dispose()` cancelled pending debounced writes instead of flushing them, dropping up to 2s of rule intelligence, false-positive dismissals, and file-state cache on every extension shutdown. Pending writes are now flushed synchronously on dispose (`ruleIntelligence.ts` likewise writes through instead of scheduling a timer that never fires).
+- **Infrastructure rules never ran in the editor** — **[src/configManager.ts](src/configManager.ts)**, **[src/extension.ts](src/extension.ts)**: the extension's language list had no yaml/terraform/dockerfile entries, so the 26 Dockerfile, Terraform, and Kubernetes rules only worked in the CLI. The editor now scans `.yaml`/`.yml`, `.tf`/`.tfvars`/`.hcl`, and `Dockerfile`/`Containerfile` files (workspace scans and on-type/on-save), with path-based language resolution so `.tf` files work even without the HashiCorp extension. Kotlin was also added to the default `enabledLanguages`, and `.mts`/`.cts` to the CLI's extension map.
+- **Broken rules that always (or never) fired** — TF005's multi-line lookahead could never see the resource body in a line-scoped engine, so it flagged every S3 bucket and RDS instance regardless of encryption settings; it now uses nearby-line suppression (and the S3 pattern was dropped — S3 has been encrypted-at-rest by default since 2023). DOCKER002, HDR001–004, XSS006, and XSS012 looked for their suppressing line (e.g. `USER app`, `helmet()`, `express.json()`) within ±3 lines when it legitimately lives far away; rules can now declare a wider `suppressNearbyWindow`.
+- **Taint-engine false positives** — **[src/taint.ts](src/taint.ts)**: a sanitizer applied in the same assignment (`const id = Number.parseInt(req.params.id, 10)`) no longer taints the variable, and `process.env`/`os.environ` are no longer treated as attacker-controlled sources (env vars are trusted deployment config; they made `jwt.sign(..., process.env.KEY)` → `res.json(token)` flows light up as XSS).
+- **Generated-file detector skipped real source files** — **[src/generatedFileDetector.ts](src/generatedFileDetector.ts)**: a bare `/webpack/i` (and `rollup`/`parcel`) content marker skipped ANY file mentioning a bundler in its first 500 characters — including `webpack.config.js` and files importing the bundler. Detection now matches actual bundler output artifacts (`webpackBootstrap`, `__webpack_require__`).
+- **Typing in one file cancelled another file's pending scan** — **[src/extension.ts](src/extension.ts)**: the 1s as-you-type debounce used a single shared timer; it is now per-document.
+- **SARIF tool version stuck at 7.0.0** — the extension's SARIF export hardcoded `version: '7.0.0'`; both exporters now share one writer (**[src/sarif.ts](src/sarif.ts)**) that reads the real package version, with the O(n²) `ruleIndex` lookup fixed.
+- **`--include` glob support** — **[src/scanRunner.ts](src/scanRunner.ts)**: the CLI documented `--include <glob>` but implemented a substring match, so `--include *.proto` matched nothing. Real glob matching (`*`, `**`, `?`) is now supported; plain substrings still work.
+
+### Changed
+
+- **One scan engine instead of three** — **[src/scanRunner.ts](src/scanRunner.ts)** is now the single scan implementation. `src/cli/scan.ts` deletes its private ~270-line copy of the walk/scan loop and imports the shared engine; **[src/analyzer.ts](src/analyzer.ts)** delegates its matching loop to the same `scanFile` (wiring in adaptive confidence, learned suppression, and config gates as hooks). Editor, CLI, and MCP server can no longer drift apart — and CLI/MCP findings now carry the same JSX-awareness and `confidenceLevel` as the editor (exposed as `confidence` in `--format json`).
+- **Faster scans** — file-level rule filters (`ruleType`, `filePatterns`) are applied once per file instead of once per line×rule (hundreds of thousands of redundant path-regex evaluations removed on large files); string patterns are lower-cased once at rule preparation instead of per line; project advisories are collected during the main scan pass instead of a second full re-scan of every file; the file-state store snapshots once per debounced write instead of deep-cloning per scanned file (O(N²) → O(N)); scanned text is hashed from the already-loaded document instead of re-reading every file from disk; the workspace loop yields with `setImmediate` instead of a ~1ms-clamped `setTimeout(0)` per file; the taint pass budget now covers function-range discovery, skips nested (already-walked) ranges, and caches identifier regexes.
+- **CLI default excludes** now also skip `.venv`, `venv`, `bower_components`, and `.terraform`.
+- **`enablePersistentCache`** now gates loading the change-detection cache itself; the dead "restore cached results" path (which could never restore anything, since issues are not persisted) was removed.
+
+### Added
+
+- **Clean-corpus false-positive guard** — `src/__tests__/fixtures/clean-corpus/` holds idiomatic secure Express/Python/Terraform/Kubernetes/Dockerfile fixtures that must produce zero Error/Warning findings; this suite caught 9 real false positives on its first run (all fixed above).
+- **Engine test suite** — `scanRunner.test.ts` (walk, language resolution, include globs, scan semantics, advisory collection, confidence/suppression hooks), `cliScan.test.ts` (argument parsing, severity gating, exit-threshold logic, formatters), `sarif.test.ts` (SARIF 2.1.0 shape, level mapping, ruleIndex consistency, real tool version), `persistence.test.ts` (dispose-flush and the restart-simulation regression), `generatedFileDetector.test.ts`. The vulnerable-corpus suite now exercises the real shared engine instead of a hand-copied reimplementation.
+- **ReDoS guard at real line length** — adversarial inputs in `redosGuard.test.ts` grew from 200 to 2,000 characters (the scanner's actual per-line cap), so polynomial backtracking that only shows at real-world lengths is caught at build time.
+- **`suppressNearbyWindow`** on `SecurityRule` — rules with whole-file suppression semantics (Dockerfile USER, helmet middleware, body-parser registration) can widen the `suppressIfNearby` scan window beyond the default ±3 lines.
+
+---
+
 ## [10.7.3] - 2026-07-15
 
 Makes the advertised one-command AI-agent integration actually run. Every documented zero-install command used the shape `npx -y caspian-security caspian <sub>`, but npx could not resolve it: the package ships five bins and none was named `caspian-security`, so npx errored with *"could not determine executable to run"*. This adds a `caspian-security` bin (aliasing the unified CLI) so `npx -y caspian-security <sub>` — and `claude mcp add caspian-security -- npx -y caspian-security mcp` — work directly, with no `-p` flag or `add-json` workaround needed.

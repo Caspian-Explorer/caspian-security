@@ -85,6 +85,12 @@ export const inputValidationRules: SecurityRule[] = [
       /req\.(?:body|query|params)\.\w+\s*[;)]/,
       /request\.(?:GET|POST|form)\[/i,
     ],
+    // Files that visibly use a validation library have addressed exactly
+    // what this reminder asks for — don't nag them.
+    suppressIfNearby: [
+      /validationResult|express-validator|celebrate|\bjoi\b|\bzod\b|\byup\b|\.parse(?:Async)?\s*\(|isEmail\s*\(|normalizeEmail\s*\(/i,
+    ],
+    suppressNearbyWindow: 40,
     suggestion: 'Validate and sanitize all request parameters using a validation library (e.g., joi, zod, express-validator)',
     category: SecurityCategory.InputValidationXSS,
     ruleType: RuleType.Informational,
@@ -158,6 +164,10 @@ export const inputValidationRules: SecurityRule[] = [
       /router\.(?:post|put|patch)\s*\(/i,
     ],
     suppressIfNearby: [/Content-Type/i, /express\.json/i, /bodyParser/i, /multer/i, /express\.urlencoded/i],
+    // Body-parser middleware is registered at app setup, far from the
+    // route handlers — a ±3-line window flagged every route in files that
+    // DID configure express.json().
+    suppressNearbyWindow: 100,
     suggestion:
       'Validate the Content-Type header on request handlers to ensure the body parser matches the expected format. Use express.json() or express.urlencoded() middleware.',
     category: SecurityCategory.InputValidationXSS,

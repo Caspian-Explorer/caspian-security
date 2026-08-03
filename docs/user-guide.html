@@ -202,9 +202,10 @@ caspian mcp-config --client cursor    # MCP config for a client</code></pre>
   --format sarif|json|text            output format (default: sarif)
   --fail-on error|warning|info|never  exit-code threshold (default: error)
   --output &lt;file&gt;                     write to a file instead of stdout
-  --include &lt;substr,substr,...&gt;       extra path substrings to include
-  --exclude &lt;substr,substr,...&gt;       directory names to skip
+  --include &lt;glob,glob,...&gt;           extra files to scan: globs (*.proto) or substrings
+  --exclude &lt;dir,dir,...&gt;             directory names to skip
   --max-file-size &lt;bytes&gt;             skip files larger than this (default: 500000)
+  --concurrency &lt;n&gt;                   worker threads for large scans (default: CPU count)
   --baseline &lt;file&gt;                   suppress known findings; only NEW ones gate
   --update-baseline                   regenerate &lt;baseline&gt;, then exit 0
   --changed-since &lt;ref&gt;               scan only files changed since &lt;ref&gt; (PR scope)</code></pre>
@@ -274,7 +275,7 @@ caspian scan . --baseline .caspian-baseline.json --fail-on error</code></pre>
     <tr><td>Caspian Security: Show Learning Dashboard</td><td>Rule effectiveness, hot zones, trends</td></tr>
   </table>
   <h3>One-click quick-fix lightbulb</h3>
-  <p>Hover a finding, press <code>Ctrl+.</code> (or click the lightbulb) for a deterministic one-click fix on the 13 most common mechanical remediations (e.g. Kubernetes <code>privileged: true → false</code>, Terraform <code>publicly_accessible = false</code>, <code>algorithms: ['RS256']</code> on <code>jwt.verify</code>). No AI round-trip; fully undoable.</p>
+  <p>Hover a finding, press <code>Ctrl+.</code> (or click the lightbulb) for a deterministic one-click fix on the 18 most common mechanical remediations (e.g. Kubernetes <code>privileged: true → false</code>, Terraform <code>publicly_accessible = false</code>, weak hashes <code>md5/sha1 → sha256</code>, Dockerfile <code>ADD → COPY</code>, <code>algorithms: ['RS256']</code> on <code>jwt.verify</code>). No AI round-trip; fully undoable.</p>
   <h3>AI fixes</h3>
   <p>For ambiguous cases, <strong>Fix Issue with AI</strong> sends the enclosing function (minimal-context by default) to your provider (Claude / GPT-4 / Gemini), shows a diff, and applies on confirmation. API keys live in VS Code SecretStorage, never in settings.</p>
 
@@ -368,7 +369,8 @@ npx -y caspian-security scan . --changed-since origin/main --fail-on error</code
   "caspianSecurity.aiFixMinimalContext": true,
   "caspianSecurity.enabledLanguages": [
     "javascript", "typescript", "python", "java",
-    "csharp", "php", "go", "rust", "kotlin"
+    "csharp", "php", "go", "rust", "kotlin",
+    "yaml", "terraform", "dockerfile"
   ]
 }</code></pre>
   <p>40+ settings, including a per-category toggle (<code>caspianSecurity.enable&lt;Category&gt;</code>) for each of the 14 categories.</p>
@@ -430,7 +432,9 @@ DB001 src/api/users.ts:100</code></pre>
     <tr><td>Dependencies &amp; Supply Chain</td><td>Unpinned versions (<code>"*"</code>, <code>^</code>), audit findings</td></tr>
     <tr><td>Infrastructure &amp; Deployment</td><td>Dockerfile / Terraform / Kubernetes misconfig, test data in prod</td></tr>
   </table>
-  <p>Languages: <strong>JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin</strong> + Infrastructure-as-code (<strong>Dockerfile, Terraform/HCL, Kubernetes YAML</strong>). Look up any rule via the MCP tools <code>list_rules</code> / <code>explain_rule</code>.</p>
+
+  <p><strong>Note:</strong> advisory/reminder rules skip matches inside comments, so commented-out code and prose stay quiet. Secret detection is exempt — a credential in a comment is still reported.</p>
+  <p>Languages: <strong>JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin</strong> + Infrastructure-as-code (<strong>Dockerfile, Terraform/HCL, Kubernetes YAML</strong>) — infrastructure files are scanned both in the editor and by the CLI as of 10.8. Look up any rule via the MCP tools <code>list_rules</code> / <code>explain_rule</code>.</p>
 
   <!-- 10 -->
   <h2 id="severity">10. Severity &amp; confidence</h2>

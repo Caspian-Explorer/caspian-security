@@ -8,11 +8,21 @@ on:
 
 jobs:
   lint-compile-test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
     strategy:
+      # Windows is in the matrix because the codebase carries explicit
+      # Windows path-normalisation logic (baseline, caspianignore, scan
+      # walk) that was previously only ever exercised on Linux.
       matrix:
-        node-version: [18, 20]
+        os: [ubuntu-latest, windows-latest]
+        node-version: [18, 20, 22]
+        exclude:
+          # One Windows leg is enough to catch path-separator regressions.
+          - os: windows-latest
+            node-version: 18
+          - os: windows-latest
+            node-version: 22
 
     steps:
       - uses: actions/checkout@v4
@@ -32,8 +42,8 @@ jobs:
       - name: Compile
         run: npm run compile
 
-      - name: Test
-        run: npm test
+      - name: Test (with coverage gate)
+        run: npm run test:coverage
 
   package:
     runs-on: ubuntu-latest

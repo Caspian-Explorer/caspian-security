@@ -57,7 +57,7 @@
 │ (15 rule │ │ Analyzer     │ │ Extractor    │ │ ignore       │
 │ files)   │ │              │ │              │ │              │
 │          │ │- Critical    │ │- Function    │ │- Parse file  │
-│- 164+    │ │- Safe        │ │  scope       │ │- Watch       │
+│- 299     │ │- Safe        │ │  scope       │ │- Watch       │
 │  rules   │ │- Verify      │ │- Variable    │ │- Match rules │
 │- Patterns│ │  needed      │ │  definitions │ │- Persist     │
 └──────────┘ └──────────────┘ └──────────────┘ └──────────────┘
@@ -114,7 +114,7 @@ ResultsStore → Results panel + SARIF/JSON/CSV export
 - Bulk ignore and rule explanation commands
 
 ### analyzer.ts (Security Engine)
-- Line-by-line pattern matching against 164+ rules
+- Line-by-line pattern matching against 291 rules (plus 8 taint-tracking rules), shared with the CLI and MCP server via scanRunner.ts
 - Context-aware filtering (comments, strings, JSX text)
 - Negative pattern and suppress-if-nearby logic
 - Learned safe pattern suppression via codebase profile
@@ -143,7 +143,7 @@ Each file exports an array of `SecurityRule` objects:
 | `dependenciesRules.ts` | Dependencies & Supply Chain | DEP001--DEP006 |
 | `infrastructureRules.ts` | Infrastructure & Deployment | INFRA001--INFRA008 |
 
-**Total: 164+ rules** (74 code-detectable + 59 informational/advisory)
+**Total: 299 rules** — 291 pattern rules (215 code-detectable + 65 informational + 11 project advisories) + 8 taint-tracking rules
 
 ### Security Rule Structure
 
@@ -157,6 +157,9 @@ interface SecurityRule {
   category: SecurityCategory;             // 1 of 14 categories
   ruleType: RuleType;                     // CodeDetectable, Informational, ProjectAdvisory
   contextAware?: boolean;                 // Skip matches in comments/strings/JSX
+  skipComments?: boolean;                 // Skip comments only — strings stay matchable
+  confidence?: ConfidenceLevel;           // Author-declared base confidence
+  suppressNearbyWindow?: number;          // ± lines scanned by suppressIfNearby (default 3)
   negativePatterns?: (RegExp | string)[]; // Suppress if safe pattern on same line
   suppressIfNearby?: RegExp[];            // Suppress if safe pattern within ±3 lines
   filePatterns?: {
@@ -296,15 +299,15 @@ interface SecurityRule {
 - **Event loop yielding**: Between every file during workspace scan to keep UI responsive
 - **Generated/minified file skip**: Path-based detection (`.min.*`, `.bundle.*`, `/dist/`, etc.) and content heuristics (avg line length, generation markers)
 - **File size limit**: Configurable `maxFileSize` (default 500KB) skips oversized files before analysis
-- **Line length guard**: Lines over 5000 characters are skipped to prevent regex backtracking on minified code
-- **Per-file timeout**: Analysis is capped at 10 seconds per file to prevent any single file from freezing VS Code
+- **Line length guard**: Lines over 2,000 characters are skipped to prevent regex backtracking on minified code
+- **Per-file timeout**: Analysis is capped at 3 seconds per file to prevent any single file from freezing VS Code
 - **Informational dedup**: Informational rules collect up to 10 candidates, fire once per file
 
 ## File Sizes
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `extension.ts` | ~1460 | Main entry, commands, scanning, AI fix workflow, learning integration |
+| `extension.ts` | ~2400 | Main entry, commands, scanning, AI fix workflow, learning integration |
 | `resultsPanel.ts` | ~810 | Webview results panel |
 | `analyzer.ts` | ~405 | Rule engine with context-aware analysis + adaptive confidence |
 | `aiFixService.ts` | ~280 | AI provider abstraction |
@@ -334,7 +337,7 @@ interface SecurityRule {
 | `scanInsights.ts` | ~230 | Actionable intelligence generation |
 | `telemetryService.ts` | ~240 | Opt-in anonymized rule stats |
 | `learningPanel.ts` | ~300 | Learning dashboard webview |
-| `rules/` (14 files) | ~1200 | 164+ security rule definitions |
+| `rules/` (14 files) | ~1200 | 299 security rule definitions (291 pattern + 8 taint) |
 | **Total** | **~7950+** | |
 
 **Memory usage**: ~5-10 MB

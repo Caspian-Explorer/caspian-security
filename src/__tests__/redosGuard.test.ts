@@ -16,19 +16,27 @@ import { getAllRules } from '../rules';
 const MAX_MS = 200;
 
 // Strings shaped to provoke backtracking in patterns that mix `.*` with
-// alternation or nested quantifiers. Kept small so a healthy regex finishes
-// in microseconds; a vulnerable one blows way past MAX_MS.
+// alternation or nested quantifiers. Sized at 2,000 chars — the scanner's
+// actual per-line cap — so a polynomial-backtracking pattern that looks
+// fine at 200 chars still gets caught before it can blow the per-file
+// budget on a real 2,000-char line. A healthy regex finishes in
+// microseconds regardless of length.
+const LINE_CAP = 2000;
 const ADVERSARIAL_INPUTS: string[] = [
-  'a'.repeat(200),
-  'a'.repeat(200) + '!',
-  'ab'.repeat(100),
-  'ab'.repeat(100) + 'x',
-  '"' + 'a'.repeat(120) + '\'',
-  'x'.repeat(80) + '${' + 'y'.repeat(80) + '}',
-  '//' + 'a'.repeat(180),
-  '(' + 'a'.repeat(100) + ')',
-  'http://' + 'a'.repeat(150) + '/',
-  'SELECT ' + 'x'.repeat(150) + " WHERE id='" + 'y'.repeat(80),
+  'a'.repeat(LINE_CAP),
+  'a'.repeat(LINE_CAP - 1) + '!',
+  'ab'.repeat(LINE_CAP / 2),
+  'ab'.repeat(LINE_CAP / 2 - 1) + 'x',
+  '"' + 'a'.repeat(LINE_CAP - 2) + '\'',
+  'x'.repeat(LINE_CAP / 2 - 2) + '${' + 'y'.repeat(LINE_CAP / 2 - 2) + '}',
+  '//' + 'a'.repeat(LINE_CAP - 2),
+  '(' + 'a'.repeat(LINE_CAP - 2) + ')',
+  'http://' + 'a'.repeat(LINE_CAP - 10) + '/',
+  'SELECT ' + 'x'.repeat(LINE_CAP / 2) + " WHERE id='" + 'y'.repeat(LINE_CAP / 2 - 20),
+  // Mixed shapes that defeat single-char scans in patterns with several
+  // independent greedy `.*` segments.
+  ('req.' + 'x'.repeat(60) + '"\'` + ').repeat(Math.floor(LINE_CAP / 70)),
+  ('<a ' + 'href='.repeat(20) + '${').repeat(Math.floor(LINE_CAP / 105)),
 ];
 
 describe('ReDoS guard', () => {

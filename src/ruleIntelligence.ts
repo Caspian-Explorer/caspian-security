@@ -62,9 +62,25 @@ export class RuleIntelligenceStore implements vscode.Disposable {
   // ---------------------------------------------------------------------------
 
   recordDetection(ruleCode: string, languageId: string, filePath: string): void {
+    this.recordDetectionInternal(ruleCode, languageId, filePath, new Date().toISOString());
+    this.markDirty();
+  }
+
+  recordDetectionBatch(issues: Array<{ ruleCode: string; languageId: string; filePath: string }>): void {
+    if (issues.length === 0) { return; }
+    // One timestamp and one dirty-mark for the whole batch — per-issue
+    // markDirty churned a debounce timer per finding.
+    const now = new Date().toISOString();
+    for (const issue of issues) {
+      this.recordDetectionInternal(issue.ruleCode, issue.languageId, issue.filePath, now);
+    }
+    this.markDirty();
+  }
+
+  private recordDetectionInternal(ruleCode: string, languageId: string, filePath: string, timestamp: string): void {
     const stats = this.getOrCreateStats(ruleCode);
     stats.detections++;
-    stats.lastFiredAt = new Date().toISOString();
+    stats.lastFiredAt = timestamp;
 
     const langStats = this.getOrCreateLangStats(stats, languageId);
     langStats.detections++;
@@ -74,13 +90,6 @@ export class RuleIntelligenceStore implements vscode.Disposable {
     patternStats.detections++;
 
     this.data.totalObservations++;
-    this.markDirty();
-  }
-
-  recordDetectionBatch(issues: Array<{ ruleCode: string; languageId: string; filePath: string }>): void {
-    for (const issue of issues) {
-      this.recordDetection(issue.ruleCode, issue.languageId, issue.filePath);
-    }
   }
 
   recordScanCompleted(): void {
@@ -351,8 +360,10 @@ export class RuleIntelligenceStore implements vscode.Disposable {
 
   dispose(): void {
     if (this.dirty) {
-      // Attempt synchronous final write
-      this.persistence.scheduleWrite(STORE_FILE, this.data, 0);
+      // writeStore's body is synchronous (fs.writeFileSync), so this
+      // completes before host teardown — a scheduled timer would not fire.
+      void this.persistence.writeStore(STORE_FILE, this.data);
+      this.dirty = false;
     }
     this._onDidChange.dispose();
   }

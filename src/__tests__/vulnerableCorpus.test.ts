@@ -11,6 +11,11 @@
  * these codes fire"). If a rule stops detecting, or a detection moves
  * to a different file, the test catches it immediately.
  *
+ * The scan goes through the REAL shared engine (src/scanRunner.ts) —
+ * the same `scanFile` the CLI, the MCP server, and the extension's
+ * analyzer use — so what is asserted here is the shipped behaviour,
+ * not a re-implementation that can drift.
+ *
  * Fixtures live at src/__tests__/fixtures/vulnerable-corpus/ and are
  * small hand-written files — no 200 MB downloads in CI.
  */
@@ -18,101 +23,20 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { getAllRules } from '../rules';
-import { SecurityRule, SecurityIssue, SecuritySeverity, RuleType } from '../types';
-import { buildLineStates, isInsideComment, isInsideStringContent } from '../scanContext';
-import { runTaintAnalysis } from '../taint';
+import { SecurityIssue, SecuritySeverity } from '../types';
+import { scanFile } from '../scanRunner';
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'vulnerable-corpus');
+const rules = getAllRules();
 
-/**
- * Tiny reimplementation of the CLI scan loop. We can't import `out/cli/scan.js`
- * directly (it calls process.exit), and calling analyzer.ts would pull in
- * vscode — so we inline the minimum.
- */
 function scanFixture(filePath: string): SecurityIssue[] {
   const text = fs.readFileSync(filePath, 'utf-8');
-  const lines = text.split('\n');
-  const lineStates = buildLineStates(text);
-  const rules = getAllRules();
-  const issues: SecurityIssue[] = [];
-  const informationalFired = new Set<string>();
-
-  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-    const line = lines[lineNum];
-    if (line.length > 2000) { continue; }
-    const lineLower = line.toLowerCase();
-
-    for (const rule of rules) {
-      if (rule.ruleType === RuleType.ProjectAdvisory) { continue; }
-      if (rule.ruleType === RuleType.Informational && informationalFired.has(rule.code)) { continue; }
-      if (rule.filePatterns) {
-        if (rule.filePatterns.include && !rule.filePatterns.include.some(p => p.test(filePath))) { continue; }
-        if (rule.filePatterns.exclude && rule.filePatterns.exclude.some(p => p.test(filePath))) { continue; }
-      }
-
-      for (const pattern of rule.patterns) {
-        const { matched, column, matchText } = matchPattern(pattern, line, lineLower);
-        if (!matched) { continue; }
-
-        if (rule.contextAware) {
-          const ls = lineStates[lineNum];
-          if (isInsideComment(line, column, ls) || isInsideStringContent(line, column, ls)) { continue; }
-        }
-
-        if (rule.negativePatterns && rule.negativePatterns.some(n =>
-          typeof n === 'string' ? lineLower.includes(n.toLowerCase()) : n instanceof RegExp && n.test(line)
-        )) { continue; }
-
-        if (rule.suppressIfNearby) {
-          let suppressed = false;
-          const s = Math.max(0, lineNum - 3);
-          const e = Math.min(lines.length - 1, lineNum + 3);
-          for (let j = s; j <= e && !suppressed; j++) {
-            for (const sp of rule.suppressIfNearby) {
-              if (sp.test(lines[j])) { suppressed = true; break; }
-            }
-          }
-          if (suppressed) { continue; }
-        }
-
-        const effectiveSev = rule.severity;
-        issues.push({
-          line: lineNum,
-          column,
-          message: rule.message,
-          severity: effectiveSev,
-          suggestion: rule.suggestion,
-          code: rule.code,
-          pattern: matchText,
-          category: rule.category,
-        });
-
-        if (rule.ruleType === RuleType.Informational) { informationalFired.add(rule.code); }
-        break;
-      }
-    }
-  }
-
-  // Taint pass.
-  try { issues.push(...runTaintAnalysis(text, 100)); } catch { /* */ }
-  return issues;
+  return scanFile(filePath, text, rules);
 }
 
-function matchPattern(
-  pattern: string | RegExp,
-  line: string,
-  lineLower: string,
-): { matched: boolean; column: number; matchText: string } {
-  try {
-    if (typeof pattern === 'string') {
-      const idx = lineLower.indexOf(pattern.toLowerCase());
-      return idx >= 0 ? { matched: true, column: idx, matchText: pattern } : { matched: false, column: 0, matchText: '' };
-    }
-    const m = pattern.exec(line);
-    return m ? { matched: true, column: m.index, matchText: m[0] } : { matched: false, column: 0, matchText: '' };
-  } catch {
-    return { matched: false, column: 0, matchText: '' };
-  }
+/** Scan in-memory text as if it were a file at the given (fake) path. */
+function scanFixtureText(fileName: string, text: string): SecurityIssue[] {
+  return scanFile(path.join(FIXTURE_DIR, fileName), text, rules);
 }
 
 function codes(issues: SecurityIssue[]): Set<string> {
@@ -161,11 +85,86 @@ describe('vulnerable-corpus regression suite', () => {
     }
   });
 
+  it('flask-service.py — Python injection / deserialization / SSRF / crypto coverage', () => {
+    const found = codes(scanFixture(path.join(FIXTURE_DIR, 'flask-service.py')));
+    const must = ['SSTI001', 'CMD003', 'CMD004', 'DESER001', 'DESER004', 'XXE004', 'LDAP003', 'SSRF004', 'SSRF005', 'ENC001'];
+    for (const code of must) {
+      expect(found).toContain(code);
+    }
+  });
+
+  it('webapp.js — auth / CORS / CSRF / API / frontend coverage', () => {
+    const found = codes(scanFixture(path.join(FIXTURE_DIR, 'webapp.js')));
+    const must = [
+      'CORS001', 'AUTH001', 'AUTH002', 'AUTH003', 'AUTH005', 'CSRF003', 'CSRF004', 'CSRF006',
+      'ENC002', 'ENC004', 'API004', 'API006', 'API011', 'XSS014', 'SSRF001', 'DESER008',
+      'CMD001', 'FE007c', 'BIZ008', 'FE006', 'FE011', 'FE012',
+    ];
+    for (const code of must) {
+      expect(found).toContain(code);
+    }
+  });
+
+  it('MainActivity.kt — Android/Kotlin (KT-*) coverage', () => {
+    const found = codes(scanFixture(path.join(FIXTURE_DIR, 'MainActivity.kt')));
+    const must = [
+      'KT-AUTH001', 'KT-AUTH002', 'KT-AUTH003', 'KT-XSS001', 'KT-XSS002', 'KT-XSS003', 'KT-XSS004',
+      'KT-ENC001', 'KT-ENC002', 'KT-ENC003', 'KT-ENC004', 'KT-FILE002', 'KT-CRED001', 'KT-LOG001', 'KT-LOG002',
+    ];
+    for (const code of must) {
+      expect(found).toContain(code);
+    }
+  });
+
   it('every finding on every fixture is an Error or Warning — no quiet Info for the egregious bugs', () => {
-    for (const file of ['express-controller.js', 'Dockerfile', 'main.tf', 'pod.yaml']) {
+    for (const file of ['express-controller.js', 'Dockerfile', 'main.tf', 'pod.yaml', 'flask-service.py', 'webapp.js', 'MainActivity.kt']) {
       const issues = scanFixture(path.join(FIXTURE_DIR, file));
       const highSeverity = issues.filter(i => i.severity >= SecuritySeverity.Warning);
       expect(highSeverity.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Provider-token detection (TOKEN family)
+// ---------------------------------------------------------------------------
+// The synthetic tokens are ASSEMBLED AT RUNTIME (join over parts) so no
+// token-shaped literal ever exists in the repo or the compiled output —
+// GitHub push protection and vsce's packaging secret-scan both check for
+// provider token shapes and would reject committed literals.
+
+describe('provider-token detection', () => {
+  const d12 = ['1234', '5678', '9012'].join('');
+  const alpha24 = ['AbCdEfGh', 'IjKlMnOp', 'QrStUvWx'].join('');
+  const hex32 = ['abcdef01', '23456789', 'abcdef01', '23456789'].join('');
+
+  const SYNTHETIC_TOKENS: Array<[string, string]> = [
+    ['TOKEN001', ['xoxb', d12, d12, d12, alpha24].join('-')],
+    ['TOKEN002', 'sk-proj-' + alpha24 + alpha24],
+    ['TOKEN004', 'AIza' + ('0Ab1Cd2Ef3Gh4Ij5Kl6Mn7Op8Qr9St0Uv1W').slice(0, 35)],
+    ['TOKEN006', 'sk_live_' + alpha24],
+    ['TOKEN007', 'AC' + hex32],
+    ['TOKEN010', 'npm_' + (alpha24 + alpha24).slice(0, 36)],
+    ['TOKEN011', 'dckr_pat_' + alpha24 + 'Yz12'],
+    ['TOKEN022', 'dop_v1_' + hex32 + hex32],
+    ['TOKEN028', ['https:', '', 'deploy:hunter2pass@registry.example.internal/repo.git'].join('/')],
+  ];
+
+  it.each(SYNTHETIC_TOKENS)('%s fires on its provider token shape (critical confidence)', (code, token) => {
+    const text = `const configValue = "${token}";\n`;
+    const issues = scanFixtureText('synthetic-tokens.js', text);
+    const hit = issues.find(i => i.code === code);
+    expect(hit).toBeDefined();
+    expect(hit!.confidenceLevel).toBe('critical');
+  });
+
+  it('ordinary config strings do not fire TOKEN rules', () => {
+    const text = [
+      'const registry = "https://registry.npmjs.org/";',
+      'const model = "claude-sonnet-5";',
+      'const key = process.env.STRIPE_KEY;',
+    ].join('\n');
+    const issues = scanFixtureText('clean-config.js', text);
+    expect(issues.filter(i => i.code.startsWith('TOKEN'))).toHaveLength(0);
   });
 });

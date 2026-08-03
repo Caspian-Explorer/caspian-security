@@ -131,9 +131,10 @@ caspian scan [path]
   --format sarif|json|text          output format (default: sarif)
   --fail-on error|warning|info|never  exit-code threshold (default: error)
   --output <file>                   write to a file instead of stdout
-  --include <substr,substr,...>     extra path substrings to include
-  --exclude <substr,substr,...>     directory names to skip
+  --include <glob,glob,...>         extra files to scan: globs (*.proto) or substrings
+  --exclude <dir,dir,...>           directory names to skip
   --max-file-size <bytes>           skip files larger than this (default: 500000)
+  --concurrency <n>                 worker threads for large scans (default: CPU count)
   --baseline <file>                 suppress known findings; only NEW ones gate
   --update-baseline                 regenerate <baseline>, then exit 0
   --changed-since <ref>             scan only files changed since <ref> (PR scope)
@@ -255,7 +256,7 @@ A selection of the most-used commands (44 total):
 
 ### One-click quick-fix lightbulb
 
-Hover a finding and press `Ctrl+.` (or click the yellow lightbulb) for a deterministic one-click fix on the 13 most common mechanical remediations (e.g. Kubernetes `privileged: true → false`, Terraform `publicly_accessible = false`, adding `algorithms: ['RS256']` to `jwt.verify`). No AI round-trip; fully undoable.
+Hover a finding and press `Ctrl+.` (or click the yellow lightbulb) for a deterministic one-click fix on the 18 most common mechanical remediations (e.g. Kubernetes `privileged: true → false`, Terraform `publicly_accessible = false`, weak hashes `md5/sha1 → sha256`, `http:// → https://`, Dockerfile `ADD → COPY`, adding `algorithms: ['RS256']` to `jwt.verify`). No AI round-trip; fully undoable.
 
 ### AI fixes
 
@@ -399,7 +400,8 @@ Set in VS Code Settings (`Ctrl+,` → search "caspianSecurity") or workspace `.v
   "caspianSecurity.aiFixMinimalContext": true,
   "caspianSecurity.enabledLanguages": [
     "javascript", "typescript", "python", "java",
-    "csharp", "php", "go", "rust", "kotlin"
+    "csharp", "php", "go", "rust", "kotlin",
+    "yaml", "terraform", "dockerfile"
   ]
 }
 ```
@@ -498,7 +500,10 @@ Look up any rule from the CLI or MCP:
 caspian mcp   # then ask the assistant to explain e.g. FILE009
 ```
 
-Languages: **JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin** + Infrastructure-as-code (**Dockerfile, Terraform/HCL, Kubernetes YAML**).
+
+> **Note:** advisory/reminder rules skip matches inside comments, so commented-out code and prose stay quiet. Secret detection is exempt — a credential in a comment is still reported.
+
+Languages: **JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin** + Infrastructure-as-code (**Dockerfile, Terraform/HCL, Kubernetes YAML**) — infrastructure files are scanned both in the editor and by the CLI as of 10.8.
 
 ---
 

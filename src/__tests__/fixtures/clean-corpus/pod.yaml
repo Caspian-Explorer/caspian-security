@@ -1,0 +1,39 @@
+# Hardened Kubernetes pod spec — should produce no Error/Warning findings.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app
+  labels:
+    app: web
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: web
+      image: registry.example.com/web@sha256:8f4e7c1b9d2a5e6f3c0a1b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4f5a6
+      imagePullPolicy: IfNotPresent
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+      env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: database-url
+      ports:
+        - containerPort: 8080

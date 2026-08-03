@@ -1,5 +1,22 @@
 import { SecurityRule, SecuritySeverity, SecurityCategory, RuleType } from '../types';
 
+/**
+ * Dependency-manifest files. DEP001/DEP002 hunt for manifest syntax
+ * (`"^1.2.3"`, `"dependencies":`) but were previously ungated, so they
+ * fired on ordinary source code — DEP001 matched the `'*'` literals in a
+ * glob parser, and DEP002 matched every `require(...)` call in every file.
+ * Gating them to the files they were written for removes that whole class
+ * of false positive.
+ */
+const MANIFEST_ONLY = {
+  include: [
+    /(?:^|[\\/])package\.json$/i,
+    /(?:^|[\\/])(?:requirements[\w.-]*\.txt|Pipfile|pyproject\.toml)$/i,
+    /(?:^|[\\/])(?:go\.mod|Cargo\.toml|pom\.xml|build\.gradle(?:\.kts)?)$/i,
+    /(?:^|[\\/])(?:Gemfile|composer\.json)$/i,
+  ],
+};
+
 export const dependenciesRules: SecurityRule[] = [
   {
     code: 'DEP001',
@@ -12,6 +29,7 @@ export const dependenciesRules: SecurityRule[] = [
       /["']>=\s*[0-9]+\./,
       /["']latest["']/,
     ],
+    filePatterns: MANIFEST_ONLY,
     suggestion: 'Pin all dependencies to exact versions (e.g., "1.2.3" instead of "^1.2.3") to ensure deterministic builds and prevent unexpected breaking changes or supply chain attacks',
     category: SecurityCategory.DependenciesSupplyChain,
     ruleType: RuleType.CodeDetectable,
@@ -25,6 +43,7 @@ export const dependenciesRules: SecurityRule[] = [
       /["']devDependencies["']\s*:/,
       /require\s*\(/,
     ],
+    filePatterns: MANIFEST_ONLY,
     suggestion: 'Establish a regular schedule (at least monthly) to review and update dependencies. Use tools like npm outdated, pip list --outdated, or Dependabot to track stale packages',
     category: SecurityCategory.DependenciesSupplyChain,
     ruleType: RuleType.Informational,

@@ -4,13 +4,13 @@
 
 A **production-ready VS Code security extension** — and a **standalone `caspian` CLI** you can run anywhere — with:
 
-- **164+ security rules** across 14 categories
+- **299 security rules** across 14 categories
 - **Context-aware analysis** with confidence scoring
 - **AI-powered fixes** using Claude, GPT-4, or Gemini with function-level understanding
 - **Standalone `caspian` command** for PowerShell / cmd / bash (no VS Code needed) + one-line AI-agent integration (Claude Code, Cursor, Antigravity, Claude Desktop, Cline) via MCP or `npx`
 - **Team-shareable `.caspianignore`** for managing false positives
 - **SARIF v2.1.0 export** for GitHub Security Alerts
-- **8 languages supported** -- JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust
+- **9 languages + infrastructure files** -- JavaScript, TypeScript, Python, Java, C#, PHP, Go, Rust, Kotlin, plus Dockerfile, Terraform, and Kubernetes/YAML manifests
 
 ---
 
@@ -76,7 +76,7 @@ caspian-security/
 │   ├── dependencyChecker.ts    # npm outdated/audit + stack checking
 │   ├── osvScanner.ts           # OSV.dev multi-ecosystem dependency check (opt-in)
 │   ├── types.ts                # TypeScript type definitions
-│   ├── rules/                  # 14 category rule files (164+ rules)
+│   ├── rules/                  # 29 category rule files (291 rules)
 │   │   ├── index.ts            # Rule registry
 │   │   ├── authRules.ts        # AUTH001--AUTH007
 │   │   ├── inputValidationRules.ts  # XSS001--XSS011
@@ -123,7 +123,7 @@ caspian-security/
 | Dependencies & Supply Chain | 6 | DEP001--DEP006 |
 | Infrastructure & Deployment | 8 | INFRA001--INFRA008 |
 
-**Total: 164+ rules** (74 code-detectable + 59 informational)
+**Total: 299 rules** — 291 pattern rules (215 code-detectable + 65 informational + 11 project advisories) + 8 taint-tracking rules
 
 ---
 
@@ -168,7 +168,7 @@ All settings use the `caspianSecurity.*` namespace:
 | Metric | Value |
 |--------|-------|
 | **Source Code** | ~5300+ lines TypeScript |
-| **Security Rules** | 164+ across 14 categories |
+| **Security Rules** | 299 across 14 categories |
 | **Languages Supported** | 8 |
 | **AI Providers** | 3 (Claude, GPT-4, Gemini) |
 | **Export Formats** | 3 (JSON, CSV, SARIF) |

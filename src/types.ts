@@ -36,8 +36,36 @@ export interface SecurityRule {
   category: SecurityCategory;
   ruleType: RuleType;
   contextAware?: boolean;
+  /**
+   * Skip matches inside comments, but STILL match inside string literals.
+   *
+   * Distinct from `contextAware`, which suppresses comments *and* strings
+   * *and* JSX text. Some rules must keep matching inside strings to work
+   * at all — DEP001 hunts for `"^1.2.3"` in package.json, which is a
+   * string literal — so `contextAware` would silently disable them. This
+   * flag gives the narrow "commented-out code isn't running code"
+   * behaviour without that risk.
+   *
+   * Deliberately NOT applied to secret-value detectors: a credential
+   * pasted into a comment is still a leaked credential.
+   */
+  skipComments?: boolean;
   negativePatterns?: (RegExp | string)[];
   suppressIfNearby?: RegExp[];
+  /**
+   * Line window (± lines) that `suppressIfNearby` scans. Defaults to 3.
+   * Whole-file advisories (e.g. "Dockerfile never sets USER") need a wide
+   * window because the suppressing line is legitimately far away.
+   */
+  suppressNearbyWindow?: number;
+  /**
+   * Author-declared base confidence for matches of this rule, used when the
+   * per-match heuristics can't decide. Set 'critical' only on rules whose
+   * pattern is essentially never accidental (provider-prefixed tokens,
+   * exact IaC config keys). Rules without it fall back to a default by
+   * ruleType: CodeDetectable → 'verify-needed', Informational → 'safe'.
+   */
+  confidence?: 'critical' | 'safe' | 'verify-needed';
   filePatterns?: {
     include?: RegExp[];
     exclude?: RegExp[];

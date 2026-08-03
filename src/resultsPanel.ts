@@ -1016,8 +1016,14 @@ export class ResultsPanel implements vscode.Disposable {
       + '<button class="btn-why" data-code="' + escapeAttr(item.code) + '" data-msg="' + escapeAttr(item.message) + '">Why?</button>';
   }
 
+  // Cap how many findings are rendered at once. Rendering tens of
+  // thousands of rows froze the webview on large scans; the cap grows
+  // via the "Show more" row.
+  let renderLimit = 500;
+
   function renderTable() {
-    const html = filteredResults.map(item => {
+    const visibleResults = filteredResults.slice(0, renderLimit);
+    let html = visibleResults.map(item => {
       const sevClass = 'severity-' + item.severityLabel.toLowerCase();
       const rowClass = item.fixStatus === 'fixed' ? ' row-fixed'
         : item.fixStatus === 'ignored' ? ' row-ignored'
@@ -1037,123 +1043,88 @@ export class ResultsPanel implements vscode.Disposable {
         + '</tr>';
     }).join('');
 
+    if (filteredResults.length > renderLimit) {
+      const remaining = filteredResults.length - renderLimit;
+      html += '<tr class="show-more-row"><td colspan="6">'
+        + '<button id="btn-show-more">Show ' + Math.min(remaining, 1000) + ' more (' + remaining + ' hidden)</button>'
+        + '</td></tr>';
+    }
+
     resultsBody.innerHTML = html;
-
-    // Navigate on row click (but not on button clicks)
-    resultsBody.querySelectorAll('tr.issue-row, tr.suggestion-row').forEach(row => {
-      row.addEventListener('click', (e) => {
-        if (e.target.closest('.btn-fix') || e.target.closest('.btn-ignore') || e.target.closest('.btn-reset') || e.target.closest('.btn-verify') || e.target.closest('.btn-fp') || e.target.closest('.btn-ignore-all') || e.target.closest('.btn-why')) return;
-        const file = row.getAttribute('data-file');
-        const line = parseInt(row.getAttribute('data-line'));
-        const col = parseInt(row.getAttribute('data-col'));
-        if (file) {
-          vscode.postMessage({ type: 'navigateToFile', filePath: file, line: line, column: col });
-        }
-      });
-    });
-
-    // AI Fix buttons
-    resultsBody.querySelectorAll('.btn-fix').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const key = btn.getAttribute('data-key');
-        const item = findItemByKey(key);
-        if (item) {
-          vscode.postMessage({
-            type: 'aiFixIssue',
-            issueData: {
-              filePath: item.filePath, relativePath: item.relativePath,
-              line: item.line, column: item.column, code: item.code,
-              pattern: item.pattern, message: item.message,
-              suggestion: item.suggestion, category: item.categoryLabel,
-              severity: item.severityLabel,
-            }
-          });
-        }
-      });
-    });
-
-    // Ignore buttons
-    resultsBody.querySelectorAll('.btn-ignore').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const key = btn.getAttribute('data-key');
-        const item = findItemByKey(key);
-        if (item) {
-          vscode.postMessage({
-            type: 'ignoreIssue',
-            issueData: {
-              filePath: item.filePath, relativePath: item.relativePath,
-              line: item.line, code: item.code, pattern: item.pattern,
-            }
-          });
-        }
-      });
-    });
-
-    // Reset buttons
-    resultsBody.querySelectorAll('.btn-reset').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const key = btn.getAttribute('data-key');
-        vscode.postMessage({ type: 'resetIssueStatus', issueKey: key });
-      });
-    });
-
-    // Verify buttons
-    resultsBody.querySelectorAll('.btn-verify').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const key = btn.getAttribute('data-key');
-        const item = findItemByKey(key);
-        if (item) {
-          vscode.postMessage({
-            type: 'verifyIssue',
-            issueData: {
-              filePath: item.filePath, relativePath: item.relativePath,
-              line: item.line, code: item.code, pattern: item.pattern,
-            }
-          });
-        }
-      });
-    });
-
-    // False Positive buttons
-    resultsBody.querySelectorAll('.btn-fp').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const key = btn.getAttribute('data-key');
-        const item = findItemByKey(key);
-        if (item) {
-          vscode.postMessage({
-            type: 'markFalsePositive',
-            issueData: {
-              filePath: item.filePath, relativePath: item.relativePath,
-              line: item.line, code: item.code, pattern: item.pattern,
-            }
-          });
-        }
-      });
-    });
-
-    // "Ignore All" buttons — bulk ignore all findings with the same rule code
-    resultsBody.querySelectorAll('.btn-ignore-all').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const code = btn.getAttribute('data-code');
-        vscode.postMessage({ type: 'ignoreAllByRule', ruleCode: code });
-      });
-    });
-
-    // "Why?" buttons — show rule explanation
-    resultsBody.querySelectorAll('.btn-why').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const code = btn.getAttribute('data-code');
-        vscode.postMessage({ type: 'explainRule', ruleCode: code });
-      });
-    });
   }
+
+  // One delegated click listener for the whole table — attaching a
+  // listener per row/button made large result sets sluggish and leaked
+  // handlers on every re-render.
+  resultsBody.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (btn) {
+      e.stopPropagation();
+      if (btn.id === 'btn-show-more') {
+        renderLimit += 1000;
+        renderTable();
+        return;
+      }
+      const key = btn.getAttribute('data-key');
+      const code = btn.getAttribute('data-code');
+      const item = key ? findItemByKey(key) : null;
+
+      if (btn.classList.contains('btn-fix') && item) {
+        vscode.postMessage({
+          type: 'aiFixIssue',
+          issueData: {
+            filePath: item.filePath, relativePath: item.relativePath,
+            line: item.line, column: item.column, code: item.code,
+            pattern: item.pattern, message: item.message,
+            suggestion: item.suggestion, category: item.categoryLabel,
+            severity: item.severityLabel,
+          }
+        });
+      } else if (btn.classList.contains('btn-ignore') && item) {
+        vscode.postMessage({
+          type: 'ignoreIssue',
+          issueData: {
+            filePath: item.filePath, relativePath: item.relativePath,
+            line: item.line, code: item.code, pattern: item.pattern,
+          }
+        });
+      } else if (btn.classList.contains('btn-reset')) {
+        vscode.postMessage({ type: 'resetIssueStatus', issueKey: key });
+      } else if (btn.classList.contains('btn-verify') && item) {
+        vscode.postMessage({
+          type: 'verifyIssue',
+          issueData: {
+            filePath: item.filePath, relativePath: item.relativePath,
+            line: item.line, code: item.code, pattern: item.pattern,
+          }
+        });
+      } else if (btn.classList.contains('btn-fp') && item) {
+        vscode.postMessage({
+          type: 'markFalsePositive',
+          issueData: {
+            filePath: item.filePath, relativePath: item.relativePath,
+            line: item.line, code: item.code, pattern: item.pattern,
+          }
+        });
+      } else if (btn.classList.contains('btn-ignore-all')) {
+        vscode.postMessage({ type: 'ignoreAllByRule', ruleCode: code });
+      } else if (btn.classList.contains('btn-why')) {
+        vscode.postMessage({ type: 'explainRule', ruleCode: code });
+      }
+      return;
+    }
+
+    // Navigate on row click (buttons handled above)
+    const row = e.target.closest('tr.issue-row, tr.suggestion-row');
+    if (row) {
+      const file = row.getAttribute('data-file');
+      const line = parseInt(row.getAttribute('data-line'));
+      const col = parseInt(row.getAttribute('data-col'));
+      if (file) {
+        vscode.postMessage({ type: 'navigateToFile', filePath: file, line: line, column: col });
+      }
+    }
+  });
 
   function findItemByKey(key) {
     return allResults.find(r => r.issueKey === key) || filteredResults.find(r => r.issueKey === key);

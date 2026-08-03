@@ -35,6 +35,7 @@ import {
   SecuritySeverity,
   SecurityCategory,
 } from './types';
+import { normaliseLineEndings } from './scanContext';
 
 // ---------------------------------------------------------------------------
 // Sources
@@ -56,10 +57,14 @@ const SOURCES: Source[] = [
     expr: /\bctx\.request\.(?:body|query|params|headers)\b/ },
   { label: 'PHP $_GET / $_POST / $_REQUEST / $_COOKIE',
     expr: /\$_(?:GET|POST|REQUEST|COOKIE|FILES|SERVER)\b(?:\[[^\]]+\])*/ },
-  { label: 'process.argv / process.env',
-    expr: /\bprocess\.(?:argv|env)\b(?:\.[\w]+|\[[^\]]+\])*/ },
-  { label: 'Python sys.argv / os.environ',
-    expr: /\b(?:sys\.argv|os\.environ)\b(?:\[[^\]]+\])?/ },
+  // NOTE: process.env / os.environ are deliberately NOT sources. Env vars
+  // are trusted deployment config — treating them as attacker input made
+  // every `jwt.sign(..., process.env.KEY)` → `res.json(token)` flow light
+  // up as XSS, which is pure noise.
+  { label: 'process.argv',
+    expr: /\bprocess\.argv\b(?:\.[\w]+|\[[^\]]+\])*/ },
+  { label: 'Python sys.argv',
+    expr: /\bsys\.argv\b(?:\[[^\]]+\])?/ },
   { label: 'process stdin / readline input',
     expr: /\bprocess\.stdin\b|\breadline\s*\(\s*\)/ },
 ];
@@ -169,9 +174,12 @@ interface FunctionRange {
 
 const FUNCTION_HEAD = /(?:^|\s)(?:async\s+)?function\s*[\w$]*\s*\(|=>\s*\{|^\s*[\w$]+\s*\([^)]*\)\s*\{|^\s*(?:export\s+)?(?:async\s+)?(?:const|let|var)\s+[\w$]+\s*=\s*(?:async\s*)?\([^)]*\)\s*=>\s*\{|^\s*(?:public|private|protected|static)?\s*(?:async\s+)?[\w$]+\s*\([^)]*\)\s*[:\s]?[^{]*\{/;
 
-function findFunctionRanges(lines: string[]): FunctionRange[] {
+function findFunctionRanges(lines: string[], deadlineAt: number): FunctionRange[] {
   const out: FunctionRange[] = [];
   for (let i = 0; i < lines.length; i++) {
+    // Range discovery does bracket-matching work proportional to file
+    // size, so it must respect the same budget as the walk itself.
+    if (i % 50 === 0 && Date.now() > deadlineAt) { break; }
     if (!FUNCTION_HEAD.test(lines[i])) { continue; }
     // Bracket-count forward to find the matching close.
     const range = bracketMatch(lines, i);
@@ -219,17 +227,29 @@ const MAX_TAINTED_VARS = 50;
  * the caller can attach them when emitting the {@link SecurityIssue}.
  */
 export function runTaintAnalysis(text: string, deadlineMs: number = 100): SecurityIssue[] {
-  const lines = text.split('\n');
-  const ranges = findFunctionRanges(lines);
+  // The clock starts BEFORE range discovery — bracket matching is the
+  // expensive half on dense files, so it must count against the budget.
+  const startedAt = Date.now();
+  const deadlineAt = startedAt + deadlineMs;
+  // CRLF-safe: a trailing '\r' broke the `$`-anchored assignment patterns
+  // below, which silently dropped taint findings on Windows checkouts.
+  const lines = normaliseLineEndings(text).split('\n');
+  const ranges = findFunctionRanges(lines, deadlineAt);
   if (ranges.length === 0) { return []; }
 
   const issues: SecurityIssue[] = [];
-  const startedAt = Date.now();
 
+  // Ranges arrive ordered by start line. Skip ranges fully contained in a
+  // range we already walked (nested arrows inside a function): the outer
+  // walk covers those lines, so re-walking wastes budget and can
+  // double-report the same sink hit.
+  let walkedMaxEnd = -1;
   for (const range of ranges) {
-    if (Date.now() - startedAt > deadlineMs) { break; }
+    if (Date.now() > deadlineAt) { break; }
+    if (range.endLine <= walkedMaxEnd) { continue; }
     if (range.endLine - range.startLine > 200) { continue; }
     walkFunction(lines, range, issues);
+    walkedMaxEnd = Math.max(walkedMaxEnd, range.endLine);
   }
 
   return issues;
@@ -308,7 +328,9 @@ function detectTaintingAssignment(line: string): TaintingAssignment | null {
     const lhs = decl[1];
     const rhs = decl[2];
     const source = matchSource(rhs);
-    if (source && SIMPLE_VAR.test(lhs)) {
+    // A sanitiser applied in the same assignment neutralises the source:
+    // `const id = Number.parseInt(req.params.id, 10)` must not taint `id`.
+    if (source && SIMPLE_VAR.test(lhs) && !isSanitiserCall(rhs)) {
       return { name: lhs, sourceLabel: source.label };
     }
   }
@@ -318,7 +340,7 @@ function detectTaintingAssignment(line: string): TaintingAssignment | null {
     const lhs = re[1];
     const rhs = re[2];
     const source = matchSource(rhs);
-    if (source && SIMPLE_VAR.test(lhs)) {
+    if (source && SIMPLE_VAR.test(lhs) && !isSanitiserCall(rhs)) {
       return { name: lhs, sourceLabel: source.label };
     }
   }
@@ -376,10 +398,25 @@ function extractCallArgs(line: string, openIdx: number): string {
   return line.substring(openIdx);
 }
 
+/**
+ * Cache of compiled identifier regexes. containsIdentifier runs for every
+ * tainted var on every sanitiser/sink line — compiling a fresh RegExp per
+ * call was measurable. Bounded so it can't grow without limit.
+ */
+const identifierRegexCache = new Map<string, RegExp>();
+const IDENTIFIER_CACHE_MAX = 500;
+
 /** Word-boundary identifier match — avoids `foo` matching `foobar`. */
 function containsIdentifier(text: string, name: string): boolean {
   // Fast path: cheap bail if the substring isn't even present.
   if (!text.includes(name)) { return false; }
-  const rx = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+  let rx = identifierRegexCache.get(name);
+  if (!rx) {
+    if (identifierRegexCache.size >= IDENTIFIER_CACHE_MAX) {
+      identifierRegexCache.clear();
+    }
+    rx = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+    identifierRegexCache.set(name, rx);
+  }
   return rx.test(text);
 }

@@ -17,6 +17,28 @@
  *   walker.
  */
 
+/**
+ * Normalise CRLF line endings to LF.
+ *
+ * Git on Windows checks files out with CRLF by default (`core.autocrlf`),
+ * and the scan engine splits on `\n` — which left a trailing `\r` on every
+ * line. Any rule pattern anchored to end-of-line (`$`) then failed to
+ * match, so Windows users silently lost findings: the vulnerable corpus
+ * loses TAINT001/003/006/007 and gains a spurious TAINT008 under CRLF.
+ *
+ * Only `\r\n` is rewritten, never a lone `\r`. A CRLF pair is
+ * unambiguously one line break, so the line COUNT and every column offset
+ * are preserved and diagnostics keep pointing at the right place.
+ * Rewriting lone CRs would risk splitting a line that contains a stray
+ * carriage-return byte and shifting every line number after it.
+ *
+ * Cheap no-op for already-LF text — the `includes` guard skips the copy.
+ */
+export function normaliseLineEndings(text: string): string {
+  if (!text.includes('\r')) { return text; }
+  return text.replace(/\r\n/g, '\n');
+}
+
 /** Where a line begins, inherited from the previous line's terminal state. */
 export interface LineState {
   /** Inside a single- or double-quoted string at char 0 of this line. Rare but legal via `\` line-continuation. */
@@ -50,6 +72,7 @@ type ScanState =
  * always a "clean" state (files always start outside any construct).
  */
 export function buildLineStates(text: string): LineState[] {
+  text = normaliseLineEndings(text);
   const lines = text.split('\n');
   const states: LineState[] = new Array(lines.length);
   states[0] = CLEAN_STATE;
@@ -297,4 +320,25 @@ function consumeRegexFlags(line: string, closeIdx: number): number {
   let i = closeIdx;
   while (i + 1 < line.length && /[gimuysd]/.test(line[i + 1])) { i++; }
   return i;
+}
+
+/**
+ * Check if a match position falls inside JSX text content (between > and <).
+ * Heuristic: a preceding `>` (end of an opening tag) with no subsequent `<`
+ * before the column, and a `<` somewhere after the match (the closing tag).
+ * Shared by the extension analyzer and the CLI scan engine.
+ */
+export function isInsideJSXText(line: string, column: number): boolean {
+  const before = line.substring(0, column);
+
+  const lastClose = before.lastIndexOf('>');
+  if (lastClose === -1) { return false; }
+
+  const afterClose = before.substring(lastClose + 1);
+  if (afterClose.includes('<')) { return false; }
+
+  const after = line.substring(column);
+  if (after.includes('<')) { return true; }
+
+  return false;
 }

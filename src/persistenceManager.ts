@@ -6,6 +6,7 @@ export class PersistenceManager implements vscode.Disposable {
   private static instance: PersistenceManager;
   private storageDir: string;
   private writeTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  private pendingData: Map<string, () => unknown> = new Map();
 
   private constructor(storageUri: vscode.Uri) {
     this.storageDir = storageUri.fsPath;
@@ -44,14 +45,22 @@ export class PersistenceManager implements vscode.Disposable {
     }
   }
 
-  scheduleWrite<T>(filename: string, data: T, delayMs: number = 2000): void {
+  /**
+   * Debounced write. `data` may be the value itself or a supplier that is
+   * invoked only when the write actually happens — pass a supplier for
+   * large stores so repeated schedule calls don't snapshot on every call.
+   */
+  scheduleWrite<T>(filename: string, data: T | (() => T), delayMs: number = 2000): void {
     const existing = this.writeTimers.get(filename);
     if (existing) {
       clearTimeout(existing);
     }
+    const supplier = (typeof data === 'function' ? data : () => data) as () => T;
+    this.pendingData.set(filename, supplier);
     const timer = setTimeout(() => {
-      this.writeStore(filename, data);
       this.writeTimers.delete(filename);
+      this.pendingData.delete(filename);
+      this.writeStore(filename, supplier());
     }, delayMs);
     this.writeTimers.set(filename, timer);
   }
@@ -63,10 +72,24 @@ export class PersistenceManager implements vscode.Disposable {
   }
 
   dispose(): void {
-    // Flush all pending writes synchronously
-    for (const [filename, timer] of this.writeTimers) {
+    // Flush all pending writes synchronously so debounced data (learning
+    // stores, file-state cache, dismissals) survives extension shutdown.
+    for (const timer of this.writeTimers.values()) {
       clearTimeout(timer);
     }
     this.writeTimers.clear();
+    for (const [filename, supplier] of this.pendingData) {
+      try {
+        this.ensureStorageDir();
+        fs.writeFileSync(
+          path.join(this.storageDir, filename),
+          JSON.stringify(supplier(), null, 2),
+          'utf-8'
+        );
+      } catch (error) {
+        console.error(`PersistenceManager: Failed to flush ${filename} on dispose:`, error);
+      }
+    }
+    this.pendingData.clear();
   }
 }

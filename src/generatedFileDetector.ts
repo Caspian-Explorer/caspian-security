@@ -82,13 +82,14 @@ function isGeneratedByContent(content: string): boolean {
     /swagger.*codegen/i,
     /openapi.*generator/i,
 
-    // TypeScript declaration files
-    /typescript.*compiler/i,
-
-    // Build tools
-    /webpack/i,
-    /rollup/i,
-    /parcel/i,
+    // Bundler runtime headers. Deliberately specific: a bare /webpack/i
+    // here used to skip ANY file that merely mentioned a bundler in its
+    // first 500 chars (a webpack.config.js, an `import 'webpack'`), which
+    // silently blinded the scanner to real source files. Only match the
+    // artifacts bundlers actually emit.
+    /webpackBootstrap/,
+    /__webpack_require__/,
+    /\/\*+\s*!\s*.*(?:rollup|parcel)/i,
   ];
 
   if (generationMarkers.some(marker => marker.test(header))) {

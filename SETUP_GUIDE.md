@@ -21,7 +21,7 @@ caspian-security/
 │   ├── caspianIgnore.ts             # .caspianignore file parsing
 │   ├── dependencyChecker.ts         # npm outdated/audit + stack checking
 │   ├── types.ts                     # TypeScript type definitions
-│   ├── rules/                       # 14 category rule files (164+ rules)
+│   ├── rules/                       # 29 category rule files (291 rules)
 │   │   ├── index.ts                 # Rule registry
 │   │   ├── authRules.ts             # AUTH001--AUTH007
 │   │   ├── inputValidationRules.ts  # XSS001--XSS011
@@ -156,7 +156,7 @@ All settings are under the `caspianSecurity.*` namespace.
 | `autoCheck` | boolean | `true` | Real-time checking as you type (1-second debounce) |
 | `checkOnSave` | boolean | `true` | Full check when files are saved |
 | `severity` | string | `"warning"` | Minimum severity to display: `"error"`, `"warning"`, or `"info"` |
-| `enabledLanguages` | array | 8 languages | Languages to analyze (JS, TS, Python, Java, C#, PHP, Go, Rust) |
+| `enabledLanguages` | array | 12 entries | Languages to analyze (JS, TS, Python, Java, C#, PHP, Go, Rust, Kotlin, YAML, Terraform, Dockerfile) |
 | `showInformational` | boolean | `true` | Show informational/best-practice reminders alongside security findings |
 | `reduceInternalPathSeverity` | boolean | `true` | Downgrade severity for files in admin, scripts, seed, internal directories |
 | `includeDependencyCheck` | boolean | `true` | Include dependency checking in workspace scans |
@@ -374,7 +374,7 @@ Before each release:
 | Metric | Value |
 |--------|-------|
 | Source Code | ~5300+ lines TypeScript |
-| Security Rules | 164+ across 14 categories |
+| Security Rules | 299 across 14 categories |
 | Languages Supported | 8 |
 | AI Providers | 3 (Claude, GPT-4, Gemini) |
 | Export Formats | 3 (JSON, CSV, SARIF) |

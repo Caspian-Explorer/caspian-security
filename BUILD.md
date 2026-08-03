@@ -24,6 +24,11 @@ npm run compile
 
 Generates JavaScript files in `out/` from TypeScript sources in `src/`.
 
+> The build emits plain `.js` only — `declaration` and `sourceMap` are off
+> in `tsconfig.json` (this is an application, not a typed library, and the
+> published VSIX shouldn't carry `.d.ts`/`.js.map` weight). Flip either flag
+> on locally if you need declarations or step-debugging.
+
 ### 3. Run in Development Mode
 
 **Option A: VS Code debug mode**
@@ -84,7 +89,7 @@ caspian-security/
 │   ├── caspianIgnore.ts        # .caspianignore file parsing (~80 lines)
 │   ├── dependencyChecker.ts    # npm outdated/audit + stack checking (~200 lines)
 │   ├── types.ts                # TypeScript type definitions
-│   ├── rules/                  # 14 category rule files (~1200 lines total)
+│   ├── rules/                  # 29 category rule files
 │   │   ├── index.ts            # Rule registry -- imports and merges all categories
 │   │   ├── authRules.ts        # AUTH001--AUTH007
 │   │   ├── inputValidationRules.ts  # XSS001--XSS011
