@@ -8,6 +8,10 @@ import {
   TaskInterval,
 } from './taskTypes';
 import { CATEGORY_LABELS, SecurityCategory } from './types';
+import { getNonce } from './webviewUtils';
+
+/** Which surface the checklist UI is rendered into. */
+type TaskSurface = 'sidebar' | 'tab';
 
 interface TaskGroup {
   label: string;
@@ -27,6 +31,7 @@ interface TaskViewData {
 export class TaskChecklistViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewType = 'caspianSecurityTasks';
   private view?: vscode.WebviewView;
+  private tabPanel?: vscode.WebviewPanel;
   private disposables: vscode.Disposable[] = [];
 
   constructor(
@@ -46,7 +51,7 @@ export class TaskChecklistViewProvider implements vscode.WebviewViewProvider, vs
       enableScripts: true,
       localResourceRoots: [this.extensionUri],
     };
-    webviewView.webview.html = this.getHtml();
+    webviewView.webview.html = this.getHtml('sidebar');
     webviewView.webview.onDidReceiveMessage(
       (msg) => this.handleMessage(msg),
       null,
@@ -55,14 +60,53 @@ export class TaskChecklistViewProvider implements vscode.WebviewViewProvider, vs
     this.sendData();
   }
 
+  /**
+   * Open the checklist as a full editor tab. The sidebar view is cramped, so
+   * this promotes the same UI into the main editor area. Reveals the existing
+   * tab instead of opening a duplicate.
+   */
+  openTab(): void {
+    if (this.tabPanel) {
+      this.tabPanel.reveal(vscode.ViewColumn.One);
+      this.sendData();
+      return;
+    }
+
+    this.tabPanel = vscode.window.createWebviewPanel(
+      'caspianSecurityTaskDashboard',
+      'Security Tasks',
+      vscode.ViewColumn.One,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [this.extensionUri],
+      },
+    );
+
+    this.tabPanel.onDidDispose(() => {
+      this.tabPanel = undefined;
+    }, null, this.disposables);
+
+    this.tabPanel.webview.onDidReceiveMessage(
+      (msg) => this.handleMessage(msg),
+      null,
+      this.disposables,
+    );
+
+    this.tabPanel.webview.html = this.getHtml('tab');
+    this.sendData();
+  }
+
   refresh(): void {
     this.sendData();
   }
 
+  /** Push the current task groups to every live surface (sidebar + editor tab). */
   private sendData(): void {
-    if (!this.view) { return; }
     const groups = this.buildGroups();
-    this.view.webview.postMessage({ type: 'update', groups });
+    const msg = { type: 'update', groups };
+    this.view?.webview.postMessage(msg);
+    this.tabPanel?.webview.postMessage(msg);
   }
 
   private handleMessage(msg: { command: string; taskId?: string }): void {
@@ -165,7 +209,7 @@ export class TaskChecklistViewProvider implements vscode.WebviewViewProvider, vs
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  private getHtml(): string {
+  private getHtml(surface: TaskSurface): string {
     const nonce = getNonce();
     return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -284,9 +328,28 @@ body {
   color: var(--vscode-descriptionForeground);
   font-size: 12px;
 }
+
+/* ── Editor tab surface ──
+   The sidebar is transparent and truncates with ellipsis to survive the narrow
+   column; neither is right once the same UI has the full editor width. */
+body[data-surface="tab"] {
+  background: var(--vscode-editor-background);
+  padding: 16px 0;
+}
+body[data-surface="tab"] #root { max-width: 900px; margin: 0 auto; }
+body[data-surface="tab"] .group { margin-bottom: 12px; }
+body[data-surface="tab"] .group-header { padding: 8px 12px; font-size: 12px; }
+body[data-surface="tab"] .task-item { padding: 8px 12px 8px 28px; }
+body[data-surface="tab"] .task-title,
+body[data-surface="tab"] .task-meta {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+body[data-surface="tab"] .empty-state { padding: 32px; }
 </style>
 </head>
-<body>
+<body data-surface="${surface}">
 <div id="root"></div>
 <script nonce="${nonce}">
 (function() {
@@ -365,17 +428,10 @@ body {
   }
 
   dispose(): void {
+    this.tabPanel?.dispose();
+    this.tabPanel = undefined;
     for (const d of this.disposables) {
       d.dispose();
     }
   }
-}
-
-function getNonce(): string {
-  let text = '';
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  for (let i = 0; i < 32; i++) {
-    text += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return text;
 }

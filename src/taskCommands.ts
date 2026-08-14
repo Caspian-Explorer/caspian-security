@@ -25,7 +25,7 @@ export function registerTaskCommands(
 
   context.subscriptions.push(
     vscode.commands.registerCommand('caspian-security.showTaskDashboard', () => {
-      vscode.commands.executeCommand('caspianSecurityTasks.focus');
+      treeProvider.openTab();
     })
   );
 

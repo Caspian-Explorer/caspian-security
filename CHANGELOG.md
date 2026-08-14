@@ -4,6 +4,27 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [10.13.0] - 2026-08-14
+
+The Security Tasks checklist now opens in the main editor window. Previously it existed only in the narrow activity-bar column, where task titles and dates were truncated and there was no way to open it anywhere else.
+
+### Added
+
+- **"Open Security Tasks in Editor" title-bar button** on the Security Tasks view — the `$(preview)` icon next to Refresh opens the checklist as a full editor tab, matching the affordance in Caspian Taskmaster and Caspian Notes. Clicking it again reveals the existing tab rather than opening a duplicate.
+- **Editor-tab layout** for the checklist: task titles and metadata wrap instead of being cut off with an ellipsis, groups get roomier spacing, and the content is centred in a readable column. The sidebar rendering is unchanged.
+- Both surfaces render from one shared template and stay live-synced from the same `TaskStore` — completing or refreshing tasks updates the sidebar and the editor tab at once.
+
+### Changed
+
+- **`Caspian Security: Show Security Tasks` is now `Caspian Security: Open Security Tasks in Editor`** and opens the editor tab instead of re-focusing the sidebar. This also upgrades the two places that already linked to it: the tasks link in the Results panel, and the **Show Tasks** button on the overdue-task notification.
+- Security Tasks title-bar buttons now use explicit ordering (`navigation@1` Refresh, `navigation@2` Open in Editor) so their order is deterministic.
+
+### Fixed
+
+- `TaskChecklistViewProvider` no longer carried a private copy of `getNonce()` — it now uses the shared helper in `webviewUtils.ts`.
+
+---
+
 ## [10.12.1] - 2026-08-03
 
 Security-documentation catch-up for the agent-loop release — no behaviour change. THREAT_MODEL.md's own rule says design changes update it in the same PR; 10.12.0 missed that, this closes the gap.

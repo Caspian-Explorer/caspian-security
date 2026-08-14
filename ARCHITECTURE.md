@@ -267,8 +267,8 @@ interface SecurityRule {
 - **taskCatalog.ts** -- 23 predefined recurring security tasks across all 14 categories with configurable intervals and auto-completion triggers
 - **taskStore.ts** -- Per-project persistence via PersistenceManager to `security-tasks.json`; manages task state (complete, snooze, dismiss, interval override)
 - **taskManager.ts** -- 15-minute scheduler for overdue detection and notifications; auto-completes tasks on workspace scan and dependency check events
-- **taskTreeProvider.ts** -- VS Code TreeDataProvider for sidebar tree view; groups by status (Overdue, Pending, Completed, Snoozed, Dismissed), sorted by priority
-- **taskCommands.ts** -- Registers 5 commands: taskAction, showTaskDetail, showTaskDashboard, refreshTasks, completeAllOverdue
+- **taskTreeProvider.ts** -- `WebviewViewProvider` for the Security Tasks checklist; groups by status (Overdue, Pending, Completed, Snoozed, Dismissed), sorted by priority. Renders into **two surfaces** from one shared HTML template — the activity-bar sidebar view and, via `openTab()`, a full editor tab (`caspianSecurityTaskDashboard`, ViewColumn.One, singleton with reveal-if-open). A `data-surface` body attribute switches the tab to a wider, non-truncating layout; `sendData()` broadcasts task updates to every live surface so both stay in sync
+- **taskCommands.ts** -- Registers 5 commands: taskAction, showTaskDetail, showTaskDashboard (opens the editor tab), refreshTasks, completeAllOverdue
 - **taskDetailPanel.ts** -- Webview panel for detailed task view with interactive actions (complete, snooze, change interval, dismiss, reinstate); auto-refreshes on task store changes
 
 ### Learning Intelligence System (ruleIntelligence.ts, adaptiveConfidence.ts, fixPatternMemory.ts, codebaseProfile.ts, scanInsights.ts, telemetryService.ts, learningPanel.ts)
@@ -339,7 +339,7 @@ interface SecurityRule {
 | `taskCatalog.ts` | ~210 | 23 predefined security task definitions |
 | `taskStore.ts` | ~180 | Task persistence via PersistenceManager |
 | `taskManager.ts` | ~165 | Scheduler, auto-completion, quick pick UI |
-| `taskTreeProvider.ts` | ~170 | Sidebar tree view provider |
+| `taskTreeProvider.ts` | ~420 | Task checklist webview -- sidebar view + editor tab |
 | `taskCommands.ts` | ~55 | Task command registration |
 | `taskDetailPanel.ts` | ~470 | Webview panel for task details and actions |
 | `ruleIntelligence.ts` | ~280 | Per-rule effectiveness tracking |

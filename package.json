@@ -7,7 +7,7 @@
     "type": "git",
     "url": "https://github.com/Caspian-Explorer/caspian-security"
   },
-  "version": "10.12.1",
+  "version": "10.13.0",
   "publisher": "CaspianTools",
   "license": "MIT",
   "engines": {
@@ -233,7 +233,8 @@
       },
       {
         "command": "caspian-security.showTaskDashboard",
-        "title": "Caspian Security: Show Security Tasks"
+        "title": "Caspian Security: Open Security Tasks in Editor",
+        "icon": "$(preview)"
       },
       {
         "command": "caspian-security.refreshTasks",
@@ -297,7 +298,12 @@
         {
           "command": "caspian-security.refreshTasks",
           "when": "view == caspianSecurityTasks",
-          "group": "navigation"
+          "group": "navigation@1"
+        },
+        {
+          "command": "caspian-security.showTaskDashboard",
+          "when": "view == caspianSecurityTasks",
+          "group": "navigation@2"
         },
         {
           "command": "caspian-security.completeAllOverdue",

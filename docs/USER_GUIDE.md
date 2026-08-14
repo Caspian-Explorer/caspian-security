@@ -1,6 +1,6 @@
 # Caspian Security — User Guide
 
-**Version 10.12.0** · Context-aware security scanning for VS Code **and** a standalone `caspian` CLI you can run anywhere.
+**Version 10.13.0** · Context-aware security scanning for VS Code **and** a standalone `caspian` CLI you can run anywhere.
 
 Caspian Security detects vulnerabilities, insecure patterns, and security best-practice violations across **code and infrastructure** — 309 rules over 14 categories, intra-file taint tracking, provider-prefix secret detection, and a git-history secret scanner. The same engine powers four surfaces:
 
@@ -270,6 +270,22 @@ A selection of the most-used commands (44 total):
 | **Caspian Security: Copy AI Agent Instructions** | Copy a CLAUDE.md / Cursor / Antigravity block to the clipboard |
 | **Caspian Security: Copy MCP Server Config** | Copy an MCP config for a chosen client |
 | **Caspian Security: Show Learning Dashboard** | Rule effectiveness, hot zones, trends |
+| **Caspian Security: Open Security Tasks in Editor** | Open the recurring-task checklist as a full editor tab |
+
+### Security Tasks checklist
+
+Click the Caspian Security shield in the activity bar to open **Security Tasks** — 23 recurring security tasks (dependency audits, secret rotation, git-history scans, per-category reviews) grouped by **Overdue / Pending / Completed / Snoozed / Dismissed**. Click any task for its detail panel, where you can complete, snooze, change the interval, or dismiss it.
+
+The sidebar column is narrow, so long task titles and dates get truncated. Two buttons sit in the view's title bar:
+
+| Button | What it does |
+|---|---|
+| ↻ **Refresh Security Tasks** | Re-evaluate due dates and redraw the list |
+| ▣ **Open Security Tasks in Editor** | Open the same checklist as a **full editor tab** in the main window |
+
+The editor tab shows the identical list with nothing truncated — titles and dates wrap in a comfortable reading column. Both views are driven by the same data, so completing or refreshing a task updates the sidebar and the tab at the same time. Clicking the button again reveals the tab you already have open rather than opening a second one.
+
+You can also reach the tab from the Command Palette (**Caspian Security: Open Security Tasks in Editor**), from the tasks link in the Results panel, or from the **Show Tasks** button on the overdue-task notification.
 
 ### One-click quick-fix lightbulb
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Caspian Security — User Guide (v10.12.0)</title>
+<title>Caspian Security — User Guide (v10.13.0)</title>
 <style>
   :root {
     --bg: #0f0f1a;
@@ -109,7 +109,7 @@
 
 <nav class="toc">
   <div class="brand">🛡️ Caspian Security</div>
-  <div class="ver">User Guide · v10.12.0</div>
+  <div class="ver">User Guide · v10.13.0</div>
   <a href="#intro">Overview</a>
   <a href="#install">1. Installation</a>
   <a href="#quickstart">2. Quick start</a>
@@ -132,7 +132,7 @@
     <h1>Caspian Security — User Guide</h1>
     <p class="tagline">Context-aware security scanning for VS Code — and a standalone <code>caspian</code> CLI you can run anywhere.</p>
     <div class="badges">
-      <span class="badge">Version <strong>10.12.0</strong></span>
+      <span class="badge">Version <strong>10.13.0</strong></span>
       <span class="badge"><strong>309</strong> rules</span>
       <span class="badge"><strong>14</strong> categories</span>
       <span class="badge">9 languages + IaC</span>
@@ -153,7 +153,7 @@
 
   <h3>VS Code / Cursor / Windsurf / VSCodium</h3>
   <pre><code>code --install-extension CaspianTools.caspian-security</code></pre>
-  <p>Or search <strong>"Caspian Security"</strong> in the Extensions sidebar. Also on <a href="https://open-vsx.org">Open VSX</a>. From a local file: <code>code --install-extension caspian-security-10.12.0.vsix</code>.</p>
+  <p>Or search <strong>"Caspian Security"</strong> in the Extensions sidebar. Also on <a href="https://open-vsx.org">Open VSX</a>. From a local file: <code>code --install-extension caspian-security-10.13.0.vsix</code>.</p>
 
   <h3>Command line (npm)</h3>
   <pre><code># Zero install — runs the latest published version (any shell)
@@ -165,7 +165,7 @@ caspian --version</code></pre>
   <div class="callout"><p><strong>Testing a local build?</strong> From a clone, run <code>npm run compile</code> then <code>npm link</code> to expose a global <code>caspian</code> backed by your local build (undo with <code>npm rm -g caspian-security</code>). See <a href="#faq">Troubleshooting</a> if <code>npx</code> returns a 404.</p></div>
 
   <h3>Verify</h3>
-  <pre><code>caspian --version      # → 10.12.0
+  <pre><code>caspian --version      # → 10.13.0
 caspian --help         # full command list</code></pre>
 
   <!-- 2 -->
@@ -285,7 +285,18 @@ caspian init .                                # set up MCP + rules block + basel
     <tr><td>Caspian Security: Copy AI Agent Instructions</td><td>Copy a CLAUDE.md / Cursor / Antigravity block</td></tr>
     <tr><td>Caspian Security: Copy MCP Server Config</td><td>Copy an MCP config for a chosen client</td></tr>
     <tr><td>Caspian Security: Show Learning Dashboard</td><td>Rule effectiveness, hot zones, trends</td></tr>
+    <tr><td>Caspian Security: Open Security Tasks in Editor</td><td>Open the recurring-task checklist as a full editor tab</td></tr>
   </table>
+  <h3>Security Tasks checklist</h3>
+  <p>Click the Caspian Security shield in the activity bar to open <strong>Security Tasks</strong> — 23 recurring security tasks (dependency audits, secret rotation, git-history scans, per-category reviews) grouped by <strong>Overdue / Pending / Completed / Snoozed / Dismissed</strong>. Click any task for its detail panel, where you can complete, snooze, change the interval, or dismiss it.</p>
+  <p>The sidebar column is narrow, so long task titles and dates get truncated. Two buttons sit in the view's title bar:</p>
+  <table>
+    <tr><th>Button</th><th>What it does</th></tr>
+    <tr><td>↻ Refresh Security Tasks</td><td>Re-evaluate due dates and redraw the list</td></tr>
+    <tr><td>▣ Open Security Tasks in Editor</td><td>Open the same checklist as a <strong>full editor tab</strong> in the main window</td></tr>
+  </table>
+  <p>The editor tab shows the identical list with nothing truncated — titles and dates wrap in a comfortable reading column. Both views are driven by the same data, so completing or refreshing a task updates the sidebar and the tab at the same time. Clicking the button again reveals the tab you already have open rather than opening a second one.</p>
+  <p>You can also reach the tab from the Command Palette (<strong>Caspian Security: Open Security Tasks in Editor</strong>), from the tasks link in the Results panel, or from the <strong>Show Tasks</strong> button on the overdue-task notification.</p>
   <h3>One-click quick-fix lightbulb</h3>
   <p>Hover a finding, press <code>Ctrl+.</code> (or click the lightbulb) for a deterministic one-click fix on the 18 most common mechanical remediations (e.g. Kubernetes <code>privileged: true → false</code>, Terraform <code>publicly_accessible = false</code>, weak hashes <code>md5/sha1 → sha256</code>, Dockerfile <code>ADD → COPY</code>, <code>algorithms: ['RS256']</code> on <code>jwt.verify</code>). No AI round-trip; fully undoable.</p>
   <h3>AI fixes</h3>
@@ -368,7 +379,7 @@ Then read the JSON output and act on it:
   <!-- 6 -->
   <h2 id="cicd">6. CI/CD integration</h2>
   <h3>GitHub Actions</h3>
-  <pre><code>- uses: Caspian-Explorer/caspian-security/.github/actions/scan@v10.12.0
+  <pre><code>- uses: Caspian-Explorer/caspian-security/.github/actions/scan@v10.13.0
   with:
     path: .
     fail-on: error
@@ -531,7 +542,7 @@ caspian --version
 caspian help</code></pre>
 
   <footer>
-    <p><strong>Caspian Security v10.12.0</strong> ·
+    <p><strong>Caspian Security v10.13.0</strong> ·
       <a href="https://marketplace.visualstudio.com/items?itemName=CaspianTools.caspian-security">Marketplace</a> ·
       <a href="https://github.com/CaspianTools/caspian-security">GitHub</a> ·
       <a href="https://github.com/CaspianTools/caspian-security/wiki">Wiki</a> ·
