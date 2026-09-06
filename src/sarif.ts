@@ -51,6 +51,7 @@ export function buildSARIF(files: SarifFileIssues[], toolVersion: string): strin
 
       sarifResults.push({
         ruleId: issue.code,
+        ...(issue.fingerprint ? { partialFingerprints: { 'caspianSource/v1': issue.fingerprint } } : {}),
         ruleIndex: rule.index,
         level,
         message: { text: `${issue.message}\n\nSuggestion: ${issue.suggestion}` },

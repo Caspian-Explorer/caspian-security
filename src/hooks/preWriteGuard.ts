@@ -23,6 +23,7 @@
  */
 
 import * as path from 'path';
+import * as fs from 'fs';
 import { spawnSync } from 'child_process';
 import { scanFile } from '../scanRunner';
 import { SecuritySeverity } from '../types';
@@ -33,6 +34,7 @@ import {
   runHook,
   extractFilePath,
   extractWriteContent,
+  reconstructEdits,
   emitPreToolUseDecision,
 } from './hookIO';
 
@@ -85,12 +87,22 @@ export function decideWriteGuard(input: HookInput): GuardDecision | null {
     };
   }
 
-  const content = extractWriteContent(input.tool_input);
-  if (!content) { return null; }
+  let content = extractWriteContent(input.tool_input);
+  let reconstructionFailed = false;
+  if (input.tool_name !== 'Write') {
+    try {
+      const resolved = path.resolve(input.cwd || process.cwd(), filePath);
+      if (fs.statSync(resolved).size > 500_000) { throw new Error('File too large'); }
+      content = reconstructEdits(fs.readFileSync(resolved, 'utf-8'), input.tool_input || {});
+    } catch { reconstructionFailed = true; }
+  }
+  if (!content && !reconstructionFailed) { return null; }
 
   // 1. Live provider credentials. Error-severity TOKEN rules only —
   //    sandbox/test keys (Warning) do not block a write.
-  const tokenHits = scanFile(filePath, content, providerSecretsRules, { runTaint: false })
+  let incomplete = false;
+  const scanOptions = { runTaint: false, onIncomplete: () => { incomplete = true; } };
+  const tokenHits = scanFile(filePath, content, providerSecretsRules, scanOptions)
     .filter(i => i.severity === SecuritySeverity.Error);
   if (tokenHits.length > 0) {
     const hit = tokenHits[0];
@@ -103,16 +115,24 @@ export function decideWriteGuard(input: HookInput): GuardDecision | null {
     };
   }
 
+  if (reconstructionFailed || incomplete) {
+    return { decision: 'ask', reason: 'Caspian could not fully check the resulting file (unsupported edit or scan limit). Review the edit before allowing it.' };
+  }
+
   // 2. Wide-open platform rules. The rule set's own filePatterns scope
   //    each check to the right file type, so a .ts file never matches the
   //    firestore.rules patterns.
-  const configHits = scanFile(filePath, content, deployConfigBlockingRules, { runTaint: false });
+  const configHits = scanFile(filePath, content, deployConfigBlockingRules, scanOptions);
   if (configHits.length > 0) {
     const hit = configHits[0];
     return {
       decision: 'deny',
       reason: `Caspian: ${hit.message} Fix before writing: ${hit.suggestion}`,
     };
+  }
+
+  if (incomplete) {
+    return { decision: 'ask', reason: 'Caspian reached an analysis limit. Review the resulting file before allowing this write.' };
   }
 
   // 3. A .env file that would be committed.

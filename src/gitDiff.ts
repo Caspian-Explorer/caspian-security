@@ -35,10 +35,11 @@ export interface ChangedFilesResult {
  * against the existing walker output.
  */
 export function getChangedFilesSince(workspace: string, ref: string): ChangedFilesResult {
+  if (!ref || ref.startsWith('-')) { throw new Error('Invalid comparison ref'); }
   const result = spawnSync(
     'git',
-    ['-C', workspace, 'diff', '--name-only', '--diff-filter=d', `${ref}...HEAD`],
-    { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 }, // 50 MB is generous; most PRs produce <1 KB
+    ['-C', workspace, 'diff', '--name-only', '-z', '--diff-filter=d', `${ref}...HEAD`, '--'],
+    { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024, timeout: 30000 }, // 50 MB is generous; most PRs produce <1 KB
   );
 
   if (result.error) {
@@ -54,13 +55,22 @@ export function getChangedFilesSince(workspace: string, ref: string): ChangedFil
     );
   }
 
-  const lines = result.stdout.split('\n').map(l => l.trim()).filter(Boolean);
+  const root = resolveGitRoot(workspace);
+  const lines = result.stdout.split('\0').filter(Boolean);
   const files = new Set<string>();
   for (const rel of lines) {
-    // git prints repo-root-relative paths. Resolve against workspace so
+    // Preserve the workspace spelling, including Windows short paths.
     // the set matches the absolute paths walkFiles() produces.
-    files.add(path.resolve(workspace, rel));
+    files.add(path.resolve(root, rel));
   }
 
   return { files, ref, diffCount: lines.length };
+}
+
+/** Resolve a lexical repo root without Git expanding Windows short paths or symlinks. */
+export function resolveGitRoot(workspace: string): string {
+  const result = spawnSync('git', ['-C', workspace, 'rev-parse', '--show-prefix'], { encoding: 'utf-8', timeout: 30000 });
+  if (result.error || result.status !== 0) { throw new Error('Cannot resolve git repository root'); }
+  const parents = result.stdout.trim().split('/').filter(Boolean).map(() => '..');
+  return path.resolve(workspace, ...parents);
 }

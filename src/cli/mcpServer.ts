@@ -285,6 +285,7 @@ export function handleScan(args: any): ToolResponse {
 
   return toolText({
     summary: {
+      diagnostics: result.diagnostics,
       files_scanned: result.filesScanned,
       files_skipped: result.filesSkipped,
       total_findings: flat.length,
@@ -396,6 +397,10 @@ export function handleCheckDeploymentSecurity(args: any): ToolResponse {
   try {
     const result = runShipCheck(root);
     return toolText({
+      status: !result.complete ? 'incomplete' : shipCheckBlocks(result) ? 'findings' : 'passed',
+      files_scanned: result.filesScanned,
+      files_skipped: result.filesSkipped,
+      diagnostics: result.diagnostics,
       report: formatShipCheckReport(result),
       blocking: shipCheckBlocks(result),
       tracked_credential_files: result.trackedCredentials,

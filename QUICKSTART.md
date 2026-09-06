@@ -91,7 +91,7 @@ npx -y caspian-security scan . --format json --fail-on error
 npm install -g caspian-security
 caspian scan .            # scan the current project
 caspian ship-check .      # pre-deploy check: open DB rules, exposed secrets, AI endpoints
-caspian init .            # one-command AI-agent setup (.mcp.json + rules block + baseline)
+caspian init .            # one-command AI-agent setup (.mcp.json + rules block; baseline acceptance is explicit)
 caspian snippet           # print a paste-ready CLAUDE.md / rules block for an AI agent
 caspian mcp-config        # print an MCP client config block
 caspian --help            # full command list

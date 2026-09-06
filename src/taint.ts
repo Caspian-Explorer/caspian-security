@@ -226,7 +226,7 @@ const MAX_TAINTED_VARS = 50;
  * `relativePath` and `languageId` are passed through onto each issue so
  * the caller can attach them when emitting the {@link SecurityIssue}.
  */
-export function runTaintAnalysis(text: string, deadlineMs: number = 100): SecurityIssue[] {
+export function runTaintAnalysis(text: string, deadlineMs: number = 100, onTimeout?: () => void): SecurityIssue[] {
   // The clock starts BEFORE range discovery — bracket matching is the
   // expensive half on dense files, so it must count against the budget.
   const startedAt = Date.now();
@@ -235,6 +235,7 @@ export function runTaintAnalysis(text: string, deadlineMs: number = 100): Securi
   // below, which silently dropped taint findings on Windows checkouts.
   const lines = normaliseLineEndings(text).split('\n');
   const ranges = findFunctionRanges(lines, deadlineAt);
+  if (Date.now() > deadlineAt) { onTimeout?.(); }
   if (ranges.length === 0) { return []; }
 
   const issues: SecurityIssue[] = [];
@@ -245,7 +246,7 @@ export function runTaintAnalysis(text: string, deadlineMs: number = 100): Securi
   // double-report the same sink hit.
   let walkedMaxEnd = -1;
   for (const range of ranges) {
-    if (Date.now() > deadlineAt) { break; }
+    if (Date.now() > deadlineAt) { onTimeout?.(); break; }
     if (range.endLine <= walkedMaxEnd) { continue; }
     if (range.endLine - range.startLine > 200) { continue; }
     walkFunction(lines, range, issues);

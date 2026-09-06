@@ -1,30 +1,9 @@
-/**
- * Baseline support — the "adopt Caspian into an existing codebase" feature.
- *
- * The format is deliberately simple: per-file, per-rule counts of known
- * findings. When a baseline is in effect, the first N occurrences of each
- * (file, rule) pair are considered "suppressed" and do NOT count toward
- * the `--fail-on` threshold. Anything beyond that is a NEW finding and
- * gates the build as usual.
- *
- * Design notes:
- *   - Counts, not per-finding fingerprints. Fingerprints need either a line
- *     number (fragile; breaks on every edit) or a normalised context hash
- *     (fragile for different reasons and opaque in diffs). A count is
- *     human-readable, git-diff-friendly, and auto-tightens: if you fix one
- *     of three occurrences, the count drops on the next --update-baseline
- *     and adding a new one will fail the build.
- *   - JSON with top-level `version`, `generatedAt`, `generatedBy`, and
- *     `counts`. Stable across releases.
- *   - Matching is file-path-exact using forward-slash normalised paths —
- *     baselines survive Windows/Linux CI migration.
- *   - Nothing is cryptographically signed. A baseline is a code artefact
- *     under review, just like a PR — if someone sneaks a bypass past
- *     review, that's a process failure, not something crypto solves.
- */
+/** Version 2 identifies findings by source fingerprints. Version 1 count baselines
+ * remain readable for migration, but cannot distinguish replacement findings. */
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { createHash } from 'crypto';
 import { SecurityIssue } from './types';
 
 /**
@@ -36,7 +15,8 @@ import { SecurityIssue } from './types';
 export const DEFAULT_BASELINE_PATH = path.join('.caspian', 'baseline.json');
 
 export interface Baseline {
-  version: 1;
+  version: 1 | 2;
+  fingerprints?: Record<string, Record<string, Record<string, number>>>;
   generatedAt: string;
   generatedBy: string;
   counts: {
@@ -64,8 +44,8 @@ export function loadBaseline(filePath: string): Baseline {
   } catch (err: any) {
     throw new Error(`baseline file is not valid JSON: ${filePath} (${err.message})`);
   }
-  if (!parsed || parsed.version !== 1 || typeof parsed.counts !== 'object') {
-    throw new Error(`baseline file has unsupported shape (expected { version: 1, counts: {...} }): ${filePath}`);
+  if (!parsed || ![1, 2].includes(parsed.version) || !parsed.counts || typeof parsed.counts !== 'object' || Array.isArray(parsed.counts) || (parsed.version === 2 && (!parsed.fingerprints || typeof parsed.fingerprints !== 'object' || Array.isArray(parsed.fingerprints)))) {
+    throw new Error(`baseline file has unsupported shape (expected a version 1 count or version 2 fingerprint baseline): ${filePath}`);
   }
   return parsed as Baseline;
 }
@@ -92,14 +72,20 @@ export function buildBaseline(
   issues: Array<SecurityIssue & { filePath: string }>,
   toolVersion: string
 ): Baseline {
-  const counts: Baseline['counts'] = {};
+  const counts: Baseline['counts'] = Object.create(null);
+  const fingerprints: NonNullable<Baseline['fingerprints']> = Object.create(null);
   for (const issue of issues) {
     const key = normalisePath(issue.filePath);
-    if (!counts[key]) { counts[key] = {}; }
+    if (!counts[key]) { counts[key] = Object.create(null); }
     counts[key][issue.code] = (counts[key][issue.code] || 0) + 1;
+    fingerprints[key] ??= Object.create(null);
+    fingerprints[key][issue.code] ??= Object.create(null);
+    const identity = findingIdentity(issue);
+    fingerprints[key][issue.code][identity] = (fingerprints[key][issue.code][identity] || 0) + 1;
   }
   return {
-    version: 1,
+    version: 2,
+    fingerprints,
     generatedAt: new Date().toISOString(),
     generatedBy: `caspian-security ${toolVersion}`,
     counts,
@@ -113,6 +99,7 @@ export function writeBaseline(filePath: string, baseline: Baseline): void {
     generatedAt: baseline.generatedAt,
     generatedBy: baseline.generatedBy,
     counts: {},
+    ...(baseline.version === 2 ? { fingerprints: sortObject(baseline.fingerprints || {}) } : {}),
   };
   const files = Object.keys(baseline.counts).sort();
   for (const f of files) {
@@ -130,20 +117,30 @@ export interface BaselineApplication {
   newFindings: Array<SecurityIssue & { filePath: string }>;
 }
 
-/**
- * Apply a baseline against a fresh scan's findings.
- *
- * Ordering: within a (file, rule) group, we drop the FIRST N findings as
- * baselined (where N is the baseline count). This keeps diff output
- * compact — users see the newer findings first in the unsuppressed list.
- * The specific N findings chosen don't matter because they're all the
- * same rule against the same file; what matters is the total.
- */
+/** Match version 2 source identities with occurrence counts. Legacy version 1
+ * retains file/rule count matching until explicitly migrated. */
 export function applyBaseline(
   issues: Array<SecurityIssue & { filePath: string }>,
   baseline: Baseline
 ): BaselineApplication {
-  // Group by (file, rule).
+  if (baseline.version === 2) {
+    const baselined: BaselineApplication['baselined'] = [];
+    const newFindings: BaselineApplication['newFindings'] = [];
+    const used = new Map<string, number>();
+    for (const issue of issues) {
+      const file = normalisePath(issue.filePath);
+      const identity = findingIdentity(issue);
+      const key = JSON.stringify([file, issue.code, identity]);
+      const budget = baseline.fingerprints?.[file]?.[issue.code]?.[identity];
+      const consumed = used.get(key) || 0;
+      if (typeof budget === 'number' && Number.isSafeInteger(budget) && consumed < budget) {
+        baselined.push(issue);
+        used.set(key, consumed + 1);
+      } else { newFindings.push(issue); }
+    }
+    return { baselined, newFindings };
+  }
+  // Legacy version 1: Group by (file, rule).
   const groups = new Map<string, Array<SecurityIssue & { filePath: string }>>();
   for (const issue of issues) {
     const key = `${normalisePath(issue.filePath)}\u0001${issue.code}`;
@@ -167,4 +164,15 @@ export function applyBaseline(
   }
 
   return { baselined, newFindings };
+}
+
+function findingIdentity(issue: SecurityIssue): string {
+  return issue.fingerprint || createHash('sha256')
+    .update(JSON.stringify([issue.code, issue.pattern, issue.line, issue.column])).digest('hex');
+}
+
+function sortObject(value: Record<string, any>): Record<string, any> {
+  return Object.fromEntries(Object.keys(value).sort().map(key => [
+    key, value[key] && typeof value[key] === 'object' ? sortObject(value[key]) : value[key],
+  ]));
 }

@@ -9,7 +9,7 @@
  */
 
 import { parentPort, workerData } from 'worker_threads';
-import { scanFileList, FileResult } from './scanRunner';
+import { scanFileList, FileResult, ScanDiagnostic } from './scanRunner';
 
 export interface ScanWorkerData {
   files: string[];
@@ -21,6 +21,7 @@ export interface ScanWorkerData {
 export interface ScanWorkerResult {
   results: FileResult[];
   filesSkipped: number;
+  diagnostics: ScanDiagnostic[];
 }
 
 export function scanFileBatch(data: ScanWorkerData): ScanWorkerResult {

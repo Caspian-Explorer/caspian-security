@@ -1,121 +1,117 @@
-name: 'Caspian Security Scan'
-description: 'Run the Caspian Security static analyzer and emit SARIF for GitHub Code Scanning.'
-author: 'Caspian-Explorer'
+name: Caspian Security Scan
+description: Scan a project and publish a readable job summary with optional SARIF upload.
+author: CaspianTools
 branding:
-  icon: 'shield'
-  color: 'blue'
-
+  icon: shield
+  color: blue
 inputs:
   path:
-    description: 'Workspace path to scan. Defaults to the repository root.'
-    required: false
+    description: Workspace directory to scan.
     default: '.'
   output:
-    description: 'Path to write SARIF output to.'
-    required: false
-    default: 'caspian-scan.sarif'
+    description: Report file path.
+    default: caspian-scan.sarif
   format:
-    description: 'Output format: sarif | json | text. Defaults to sarif.'
-    required: false
-    default: 'sarif'
+    description: 'sarif | json | text'
+    default: sarif
   fail-on:
-    description: 'Minimum severity that causes a non-zero exit. error | warning | info | never. Defaults to error.'
-    required: false
-    default: 'error'
+    description: 'error | warning | info | never. Use never for advisory adoption.'
+    default: error
+  new-only:
+    description: Compare findings with the merge base when changed-since is set; added files are fully checked.
+    default: 'false'
+  strict:
+    description: Reject any incomplete coverage, including generated and oversized files.
+    default: 'false'
   include:
-    description: 'Comma-separated extra file-path substrings to include.'
-    required: false
+    description: Comma-separated additional file globs or path fragments.
     default: ''
   exclude:
-    description: 'Comma-separated extra file-path substrings to exclude (appended to the built-in exclude list).'
-    required: false
+    description: Comma-separated additional directory basenames to exclude.
     default: 'out,node_modules,.git,coverage,dist,build'
   max-file-size:
-    description: 'Skip files larger than this many bytes.'
-    required: false
+    description: Maximum file size in bytes; 0 disables the limit.
     default: '500000'
   baseline:
-    description: >-
-      Path to a baseline file (from `caspian-scan --update-baseline`). When
-      provided, findings listed in the baseline are suppressed; only NEW
-      findings beyond the baseline counts gate the build. Ideal for adopting
-      Caspian into existing codebases without a big-bang remediation.
-    required: false
+    description: Optional reviewed baseline file. New baselines use source fingerprints.
     default: ''
   changed-since:
-    description: >-
-      Git ref to diff against (e.g. `origin/main`,
-      `${{ github.event.pull_request.base.sha }}`). When set, Caspian only
-      scans files that differ from that ref in a `<ref>...HEAD` diff —
-      turning a full-repo scan into a PR-scoped one. Pair with
-      actions/checkout@v4 `fetch-depth: 0` so the ref is available.
-    required: false
+    description: 'Git ref for changed-file scope. Requires checkout fetch-depth: 0. Existing findings within changed files are still reported unless baselined.'
     default: ''
   upload-sarif:
-    description: 'If true, upload the SARIF file to GitHub Code Scanning using github/codeql-action/upload-sarif@v3.'
-    required: false
+    description: Upload SARIF to Code Scanning. Requires repository support and security-events write permission.
     default: 'true'
-
 outputs:
   sarif-file:
-    description: 'Path to the SARIF file that was written.'
+    description: Report file path.
     value: ${{ inputs.output }}
-
+  exit-code:
+    description: 'Scanner exit: 0 below threshold, 1 findings, 2 failed or strict incomplete scan.'
+    value: ${{ steps.scan.outputs.exit-code }}
 runs:
-  using: 'composite'
+  using: composite
   steps:
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: 20
-
-    # CASPIAN_ROOT points at the checkout of the caspian-security repo that
-    # GitHub provides when the workflow references this action via
-    # `uses: Caspian-Explorer/caspian-security/.github/actions/scan@<ref>`.
-    # The action's own path is `<checkout>/.github/actions/scan`, so
-    # `../../..` resolves back to the caspian-security root.
+        node-version: '22'
     - name: Install Caspian dependencies
       shell: bash
       run: |
         CASPIAN_ROOT="$GITHUB_ACTION_PATH/../../.."
         echo "CASPIAN_ROOT=$CASPIAN_ROOT" >> "$GITHUB_ENV"
         npm --prefix "$CASPIAN_ROOT" ci
-
     - name: Compile Caspian
       shell: bash
       run: npm --prefix "$CASPIAN_ROOT" run compile
-
     - name: Run Caspian scan
+      id: scan
       shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        SCAN_FORMAT: ${{ inputs.format }}
+        SCAN_OUTPUT: ${{ inputs.output }}
+        SCAN_FAIL_ON: ${{ inputs.fail-on }}
+        SCAN_MAX_SIZE: ${{ inputs.max-file-size }}
+        SCAN_INCLUDE: ${{ inputs.include }}
+        SCAN_EXCLUDE: ${{ inputs.exclude }}
+        SCAN_BASELINE: ${{ inputs.baseline }}
+        SCAN_BASE: ${{ inputs.changed-since }}
+        SCAN_NEW_ONLY: ${{ inputs.new-only }}
+        SCAN_STRICT: ${{ inputs.strict }}
       run: |
-        set +e
-        node "$CASPIAN_ROOT/out/cli/scan.js" \
-          "${{ inputs.path }}" \
-          --format "${{ inputs.format }}" \
-          --output "${{ inputs.output }}" \
-          --fail-on "${{ inputs.fail-on }}" \
-          --max-file-size "${{ inputs.max-file-size }}" \
-          ${{ inputs.include && format('--include "{0}"', inputs.include) || '' }} \
-          ${{ inputs.exclude && format('--exclude "{0}"', inputs.exclude) || '' }} \
-          ${{ inputs.baseline && format('--baseline "{0}"', inputs.baseline) || '' }} \
-          ${{ inputs.changed-since && format('--changed-since "{0}"', inputs.changed-since) || '' }}
-        echo "CASPIAN_EXIT=$?" >> "$GITHUB_ENV"
-
+        : > "$RUNNER_TEMP/caspian-summary.md"
+        args=("$SCAN_PATH" --format "$SCAN_FORMAT" --output "$SCAN_OUTPUT"
+          --fail-on "$SCAN_FAIL_ON" --max-file-size "$SCAN_MAX_SIZE"
+          --summary "$RUNNER_TEMP/caspian-summary.md")
+        if [ -n "$SCAN_INCLUDE" ]; then args+=(--include "$SCAN_INCLUDE"); fi
+        if [ -n "$SCAN_EXCLUDE" ]; then args+=(--exclude "$SCAN_EXCLUDE"); fi
+        if [ -n "$SCAN_BASELINE" ]; then args+=(--baseline "$SCAN_BASELINE"); fi
+        if [ -n "$SCAN_BASE" ]; then args+=(--changed-since "$SCAN_BASE"); fi
+        if [ "$SCAN_STRICT" = "true" ]; then args+=(--strict); fi
+        if [ "$SCAN_NEW_ONLY" = "true" ] && [ -n "$SCAN_BASE" ]; then args+=(--new-only); fi
+        scan_exit=0
+        node "$CASPIAN_ROOT/out/cli/scan.js" "${args[@]}" || scan_exit=$?
+        echo "exit-code=$scan_exit" >> "$GITHUB_OUTPUT"
+        if [ -s "$RUNNER_TEMP/caspian-summary.md" ]; then
+          cat "$RUNNER_TEMP/caspian-summary.md" >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo '## Caspian Security: scan failed before producing a report' >> "$GITHUB_STEP_SUMMARY"
+        fi
     - name: Upload SARIF to Code Scanning
-      if: ${{ inputs.upload-sarif == 'true' && inputs.format == 'sarif' }}
+      if: ${{ inputs.upload-sarif == 'true' && inputs.format == 'sarif' && steps.scan.outputs.exit-code != '2' }}
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: ${{ inputs.output }}
         category: caspian-security
-
-    # Propagate the scanner's exit code AFTER the SARIF upload so findings are
-    # still visible in the Security tab even if the build fails.
-    - name: Enforce fail-on threshold
+    - name: Enforce scan outcome
+      if: always()
       shell: bash
+      env:
+        SCAN_EXIT: ${{ steps.scan.outputs.exit-code }}
       run: |
-        if [ "${CASPIAN_EXIT:-0}" = "0" ]; then
-          echo "Caspian scan passed the '${{ inputs.fail-on }}' threshold."
-          exit 0
-        fi
-        echo "Caspian scan found findings at or above the '${{ inputs.fail-on }}' threshold (exit $CASPIAN_EXIT)."
-        exit "$CASPIAN_EXIT"
+        case "$SCAN_EXIT" in
+          0) echo 'Scan completed below the configured threshold. Review the summary for coverage gaps.' ;;
+          1) echo 'Findings exceed the configured threshold.'; exit 1 ;;
+          *) echo 'Scan failed or coverage was incomplete under strict mode.'; exit 2 ;;
+        esac

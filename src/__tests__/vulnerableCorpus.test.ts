@@ -168,3 +168,8 @@ describe('provider-token detection', () => {
     expect(issues.filter(i => i.code.startsWith('TOKEN'))).toHaveLength(0);
   });
 });
+
+// These are detection assertions. Instrumentation and scheduling must not
+// consume the analysis budget; timeout behavior is tested separately.
+beforeEach(() => { jest.spyOn(Date, 'now').mockReturnValue(0); });
+afterEach(() => { jest.restoreAllMocks(); });

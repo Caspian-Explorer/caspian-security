@@ -14,6 +14,10 @@ What sets it apart: **context-aware intelligence**. The scanner classifies issue
 
 > 📖 **New here?** The [complete User Guide](docs/USER_GUIDE.md) ([HTML](docs/user-guide.html)) covers every way to run Caspian — CLI, VS Code, AI agents (Claude Code / Cursor / Antigravity), and CI/CD.
 
+## Connect another project (upcoming release)
+
+Add advisory pull-request checks with a setup preview, merge-base comparison, and readable job summaries. See [Connect a project](docs/CONNECT_PROJECT.md) for source-checkout instructions, optional agent setup, and migration to strict checks. These changes must be released before using the new flags through npm.
+
 ## Install
 
 ### In VS Code
@@ -42,7 +46,7 @@ caspian mcp                    # start the MCP server (stdio)
 caspian scan-file <file>       # single-file scan, only NEW findings beyond the baseline
 caspian ship-check             # pre-deploy check: open DB rules, exposed secrets, unmetered AI endpoints
 caspian baseline accept        # accept current findings into .caspian/baseline.json
-caspian init                   # one-command AI-agent setup (.mcp.json + rules block + baseline)
+caspian init                   # one-command AI-agent setup (.mcp.json + rules block; baseline acceptance is explicit)
 caspian snippet                # print a paste-ready AI-agent instruction block
 caspian mcp-config             # print an MCP client config block
 caspian --help                 # full command list

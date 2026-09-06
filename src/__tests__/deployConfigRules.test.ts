@@ -134,9 +134,9 @@ export async function POST(req: Request) {
     expect(codes('/app/app/api/chat/route.ts', llmRoute)).toContain('DEPLOY008');
   });
 
-  it('stays quiet when a rate limiter is present in the file', () => {
+  it('still requests review when only a rate limiter import is present', () => {
     const limited = `import { Ratelimit } from '@upstash/ratelimit';\n${llmRoute}`;
-    expect(codes('/app/app/api/chat/route.ts', limited)).toEqual([]);
+    expect(codes('/app/app/api/chat/route.ts', limited)).toContain('DEPLOY008');
   });
 
   it('does not fire outside route-like files', () => {

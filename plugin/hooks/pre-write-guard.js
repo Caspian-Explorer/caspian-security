@@ -37,7 +37,11 @@ __export(preWriteGuard_exports, {
 });
 module.exports = __toCommonJS(preWriteGuard_exports);
 var path = __toESM(require("path"));
+var fs = __toESM(require("fs"));
 var import_child_process = require("child_process");
+
+// src/scanRunner.ts
+var import_crypto = require("crypto");
 
 // src/rules/authRules.ts
 var authRules = [
@@ -3520,7 +3524,7 @@ var deployConfigRules = [
   },
   {
     code: "DEPLOY008",
-    message: "This server endpoint calls a paid AI model with no rate limit in sight. Anyone who finds the URL can call it in a loop and run up an unbounded model bill \u2014 LLM endpoints are actively scanned for.",
+    message: "This endpoint calls a paid AI model. Verify that authentication, rate limits, and spend controls protect this specific call. Imports and comments do not prove enforcement.",
     severity: 1 /* Warning */,
     patterns: [
       /\.chat\.completions\.create\s*\(/,
@@ -3529,15 +3533,6 @@ var deployConfigRules = [
       /\bgetGenerativeModel\s*\(/,
       /\breplicate\.run\s*\(/i
     ],
-    suppressIfNearby: [
-      /rate[-_ ]?limit/i,
-      /\blimiter\b/i,
-      /\bupstash\b/i,
-      /\bthrottl/i,
-      /\barcjet\b/i,
-      /\bslowdown\b/i
-    ],
-    suppressNearbyWindow: 400,
     suggestion: "Add a per-IP or per-user rate limit before the model call (e.g. @upstash/ratelimit or express-rate-limit), and consider a spend cap with the model provider.",
     category: "api-security" /* APISecurity */,
     ruleType: ruleType10,
@@ -4897,11 +4892,14 @@ var ASSIGN_DECL = /(?:^|\s)(?:const|let|var)\s+(\{[^}]+\}|\[[^\]]+\]|[\w$]+)\s*=
 var ASSIGN_REASSIGN = /^\s*([\w$]+)\s*=\s*(.+);?$/;
 var SIMPLE_VAR = /^[\w$]+$/;
 var MAX_TAINTED_VARS = 50;
-function runTaintAnalysis(text, deadlineMs = 100) {
+function runTaintAnalysis(text, deadlineMs = 100, onTimeout) {
   const startedAt = Date.now();
   const deadlineAt = startedAt + deadlineMs;
   const lines = normaliseLineEndings(text).split("\n");
   const ranges = findFunctionRanges(lines, deadlineAt);
+  if (Date.now() > deadlineAt) {
+    onTimeout?.();
+  }
   if (ranges.length === 0) {
     return [];
   }
@@ -4909,6 +4907,7 @@ function runTaintAnalysis(text, deadlineMs = 100) {
   let walkedMaxEnd = -1;
   for (const range of ranges) {
     if (Date.now() > deadlineAt) {
+      onTimeout?.();
       break;
     }
     if (range.endLine <= walkedMaxEnd) {
@@ -5105,10 +5104,12 @@ function scanFile(filePath, text, rules, optionsOrRunTaint = {}) {
   const advisoryRules = options.advisorySink ? rules.filter((r) => r.ruleType === "project-advisory" /* ProjectAdvisory */) : [];
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {
     if (lineNum % 25 === 0 && lineNum > 0 && Date.now() > deadline) {
+      options.onIncomplete?.("timeout", lineNum + 1);
       break;
     }
     const line = lines[lineNum];
     if (line.length > 2e3) {
+      options.onIncomplete?.("long-line", lineNum + 1);
       continue;
     }
     const lineLower = line.toLowerCase();
@@ -5139,6 +5140,7 @@ function scanFile(filePath, text, rules, optionsOrRunTaint = {}) {
             }
           }
         } catch {
+          options.onIncomplete?.("analysis-error", lineNum + 1);
           continue;
         }
         if (!matched) {
@@ -5254,11 +5256,12 @@ function scanFile(filePath, text, rules, optionsOrRunTaint = {}) {
   }
   if (options.runTaint !== false) {
     try {
-      const taintFindings = runTaintAnalysis(text, 100);
+      const taintFindings = runTaintAnalysis(text, 100, () => options.onIncomplete?.("timeout"));
       for (const t of taintFindings) {
         issues.push(t);
       }
     } catch {
+      options.onIncomplete?.("analysis-error");
     }
   }
   for (const candidates of informationalCandidates.values()) {
@@ -5266,6 +5269,9 @@ function scanFile(filePath, text, rules, optionsOrRunTaint = {}) {
       continue;
     }
     issues.push(pickBestInformationalCandidate(candidates, lines));
+  }
+  for (const issue of issues) {
+    issue.fingerprint = (0, import_crypto.createHash)("sha256").update(JSON.stringify([issue.code, (lines[issue.line] || "").trim()])).digest("hex");
   }
   return issues;
 }
@@ -5299,13 +5305,13 @@ function pickBestInformationalCandidate(candidates, lines) {
 
 // src/hooks/hookIO.ts
 function readStdin() {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     let data = "";
     let settled = false;
     const done = () => {
       if (!settled) {
         settled = true;
-        resolve(data);
+        resolve2(data);
       }
     };
     const timer = setTimeout(done, 3e3);
@@ -5368,6 +5374,21 @@ async function runHook(main) {
     process.exit(0);
   }
 }
+function reconstructEdits(original, input) {
+  const edits = Array.isArray(input.edits) ? input.edits : [input];
+  let result = original;
+  for (const edit of edits) {
+    if (!edit || typeof edit.old_string !== "string" || !edit.old_string || typeof edit.new_string !== "string") {
+      throw new Error("Unsupported edit shape");
+    }
+    const occurrences = result.split(edit.old_string).length - 1;
+    if (!occurrences || occurrences > 1 && edit.replace_all !== true) {
+      throw new Error("Edit target is missing or ambiguous");
+    }
+    result = edit.replace_all === true ? result.split(edit.old_string).join(edit.new_string) : result.replace(edit.old_string, () => edit.new_string);
+  }
+  return result;
+}
 
 // src/hooks/preWriteGuard.ts
 var WRITE_TOOLS = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
@@ -5411,11 +5432,27 @@ function decideWriteGuard(input) {
       reason: `Caspian: this write changes ${path.basename(filePath)}, which controls what the security scanner reports. Scanner guardrails should only change with your approval \u2014 a finding that is wrong is silenced by a human via \`caspian baseline accept\` or .caspianignore, not by the agent.`
     };
   }
-  const content = extractWriteContent(input.tool_input);
-  if (!content) {
+  let content = extractWriteContent(input.tool_input);
+  let reconstructionFailed = false;
+  if (input.tool_name !== "Write") {
+    try {
+      const resolved = path.resolve(input.cwd || process.cwd(), filePath);
+      if (fs.statSync(resolved).size > 5e5) {
+        throw new Error("File too large");
+      }
+      content = reconstructEdits(fs.readFileSync(resolved, "utf-8"), input.tool_input || {});
+    } catch {
+      reconstructionFailed = true;
+    }
+  }
+  if (!content && !reconstructionFailed) {
     return null;
   }
-  const tokenHits = scanFile(filePath, content, providerSecretsRules, { runTaint: false }).filter((i) => i.severity === 2 /* Error */);
+  let incomplete = false;
+  const scanOptions = { runTaint: false, onIncomplete: () => {
+    incomplete = true;
+  } };
+  const tokenHits = scanFile(filePath, content, providerSecretsRules, scanOptions).filter((i) => i.severity === 2 /* Error */);
   if (tokenHits.length > 0) {
     const hit = tokenHits[0];
     return {
@@ -5423,13 +5460,19 @@ function decideWriteGuard(input) {
       reason: `Caspian: this write puts a live credential in source (${hit.message}). Read it from an environment variable or a secrets manager at runtime instead. If this key was ever real, rotate it with the provider.`
     };
   }
-  const configHits = scanFile(filePath, content, deployConfigBlockingRules, { runTaint: false });
+  if (reconstructionFailed || incomplete) {
+    return { decision: "ask", reason: "Caspian could not fully check the resulting file (unsupported edit or scan limit). Review the edit before allowing it." };
+  }
+  const configHits = scanFile(filePath, content, deployConfigBlockingRules, scanOptions);
   if (configHits.length > 0) {
     const hit = configHits[0];
     return {
       decision: "deny",
       reason: `Caspian: ${hit.message} Fix before writing: ${hit.suggestion}`
     };
+  }
+  if (incomplete) {
+    return { decision: "ask", reason: "Caspian reached an analysis limit. Review the resulting file before allowing this write." };
   }
   if (isEnvFile(filePath) && input.cwd && envFileWouldBeCommitted(filePath, input.cwd)) {
     return {

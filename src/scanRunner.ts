@@ -7,6 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { createHash } from 'crypto';
 import { getAllRules } from './rules';
 import {
   SecurityRule,
@@ -77,12 +78,20 @@ export interface RunScanResult {
   filesScanned: number;
   filesSkipped: number;
   totalIssues: number;
+  diagnostics: ScanDiagnostic[];
+}
+
+export interface ScanDiagnostic {
+  path: string;
+  reason: 'unreadable' | 'too-large' | 'generated' | 'long-line' | 'timeout' | 'analysis-error';
+  line?: number;
 }
 
 /** Shape of a worker's reply — mirrors ScanWorkerResult in scanWorker.ts. */
 interface ScanWorkerResult {
   results: FileResult[];
   filesSkipped: number;
+  diagnostics: ScanDiagnostic[];
 }
 
 /**
@@ -131,7 +140,7 @@ export function buildIncludeMatcher(tokens: string[]): (fullPath: string) => boo
   return (fullPath: string) => matchers.some(m => m(fullPath));
 }
 
-export function walkFiles(root: string, excludes: string[] = [], extraIncludes: string[] = []): string[] {
+export function walkFiles(root: string, excludes: string[] = [], extraIncludes: string[] = [], diagnostics: ScanDiagnostic[] = []): string[] {
   const found: string[] = [];
   const skipSet = new Set(DEFAULT_EXCLUDES.concat(excludes));
   const includeMatcher = extraIncludes.length > 0 ? buildIncludeMatcher(extraIncludes) : null;
@@ -143,6 +152,7 @@ export function walkFiles(root: string, excludes: string[] = [], extraIncludes: 
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
+      diagnostics.push({ path: path.relative(root, dir) || '.', reason: 'unreadable' });
       continue;
     }
 
@@ -182,6 +192,7 @@ export interface AdvisorySink {
 }
 
 export interface ScanFileOptions {
+  onIncomplete?: (reason: ScanDiagnostic['reason'], line?: number) => void;
   /** Run the intra-file taint pass (default true). */
   runTaint?: boolean;
   /**
@@ -297,9 +308,9 @@ export function scanFile(
     : [];
 
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-    if (lineNum % 25 === 0 && lineNum > 0 && Date.now() > deadline) { break; }
+    if (lineNum % 25 === 0 && lineNum > 0 && Date.now() > deadline) { options.onIncomplete?.('timeout', lineNum + 1); break; }
     const line = lines[lineNum];
-    if (line.length > 2000) { continue; }
+    if (line.length > 2000) { options.onIncomplete?.('long-line', lineNum + 1); continue; }
     const lineLower = line.toLowerCase();
 
     for (const { rule, strings, reduceToInfo } of activeRules) {
@@ -324,6 +335,7 @@ export function scanFile(
             if (m) { matched = true; column = m.index; matchText = m[0]; }
           }
         } catch {
+          options.onIncomplete?.('analysis-error', lineNum + 1);
           continue;
         }
         if (!matched) { continue; }
@@ -435,9 +447,9 @@ export function scanFile(
 
   if (options.runTaint !== false) {
     try {
-      const taintFindings = runTaintAnalysis(text, 100);
+      const taintFindings = runTaintAnalysis(text, 100, () => options.onIncomplete?.('timeout'));
       for (const t of taintFindings) { issues.push(t); }
-    } catch { /* don't let taint failures hide regular findings */ }
+    } catch { options.onIncomplete?.('analysis-error'); }
   }
 
   for (const candidates of informationalCandidates.values()) {
@@ -445,6 +457,12 @@ export function scanFile(
     issues.push(pickBestInformationalCandidate(candidates, lines));
   }
 
+  for (const issue of issues) {
+    // Ignore indentation, but preserve whitespace inside source expressions.
+    issue.fingerprint = createHash('sha256')
+      .update(JSON.stringify([issue.code, (lines[issue.line] || '').trim()]))
+      .digest('hex');
+  }
   return issues;
 }
 
@@ -472,12 +490,15 @@ export function pickBestInformationalCandidate(candidates: SecurityIssue[], line
  */
 export function runWorkspaceScan(options: RunScanOptions & { files?: string[] }): RunScanResult {
   const maxFileSize = options.maxFileSize ?? 500_000;
-  const files = options.files ?? walkFiles(options.workspace, options.exclude || [], options.include || []);
-  const { results, filesSkipped } = scanFileList(
+  const diagnostics: ScanDiagnostic[] = [];
+  const files = options.files ?? walkFiles(options.workspace, options.exclude || [], options.include || [], diagnostics);
+  const batch = scanFileList(
     files, options.workspace, maxFileSize, options.runTaint !== false
   );
+  const { results, filesSkipped } = batch;
+  diagnostics.push(...batch.diagnostics);
   const totalIssues = results.reduce((n, r) => n + r.issues.length, 0);
-  return { results, filesScanned: files.length, filesSkipped, totalIssues };
+  return { results, filesScanned: files.length - filesSkipped, filesSkipped, totalIssues, diagnostics };
 }
 
 /**
@@ -490,30 +511,38 @@ export function scanFileList(
   workspace: string,
   maxFileSize: number,
   runTaint: boolean
-): { results: FileResult[]; filesSkipped: number } {
+): ScanWorkerResult {
   const rules = getAllRules();
   const results: FileResult[] = [];
   let filesSkipped = 0;
+  const diagnostics: ScanDiagnostic[] = [];
 
   for (const fp of files) {
+    const relativePath = (path.relative(workspace, fp) || fp).replace(/\\/g, '/');
+    const skip = (reason: ScanDiagnostic['reason']): void => {
+      filesSkipped++;
+      diagnostics.push({ path: relativePath, reason });
+    };
     let stat: fs.Stats;
-    try { stat = fs.statSync(fp); } catch { continue; }
-    if (maxFileSize > 0 && stat.size > maxFileSize) { filesSkipped++; continue; }
+    try { stat = fs.statSync(fp); } catch { skip('unreadable'); continue; }
+    if (maxFileSize > 0 && stat.size > maxFileSize) { skip('too-large'); continue; }
 
     let text: string;
-    try { text = fs.readFileSync(fp, 'utf-8'); } catch { continue; }
+    try { text = fs.readFileSync(fp, 'utf-8'); } catch { skip('unreadable'); continue; }
 
-    if (isGeneratedFile(fp, text)) { filesSkipped++; continue; }
+    if (isGeneratedFile(fp, text)) { skip('generated'); continue; }
 
     const languageId = resolveLanguage(fp);
-    const relativePath = path.relative(workspace, fp) || fp;
-    const issues = scanFile(fp, text, rules, runTaint);
+    const issues = scanFile(fp, text, rules, {
+      runTaint,
+      onIncomplete: (reason, line) => diagnostics.push({ path: relativePath, reason, line }),
+    });
     if (issues.length > 0) {
       results.push({ filePath: fp, relativePath, languageId, issues });
     }
   }
 
-  return { results, filesSkipped };
+  return { results, filesSkipped, diagnostics };
 }
 
 /**
@@ -548,7 +577,13 @@ export async function runWorkspaceScanParallel(
 ): Promise<RunScanResult> {
   const maxFileSize = options.maxFileSize ?? 500_000;
   const runTaint = options.runTaint !== false;
-  const files = options.files ?? walkFiles(options.workspace, options.exclude || [], options.include || []);
+  const diagnostics: ScanDiagnostic[] = [];
+  const files = options.files ?? walkFiles(options.workspace, options.exclude || [], options.include || [], diagnostics);
+  const sync = (): RunScanResult => {
+    const result = runWorkspaceScan({ ...options, files, maxFileSize, runTaint });
+    result.diagnostics.unshift(...diagnostics);
+    return result;
+  };
   const minFiles = options.minFilesForParallel ?? 200;
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -558,21 +593,21 @@ export async function runWorkspaceScanParallel(
 
   // Not worth the thread overhead — run inline.
   if (workerCount <= 1 || files.length < minFiles) {
-    return runWorkspaceScan({ ...options, files, maxFileSize, runTaint });
+    return sync();
   }
 
   let Worker: typeof import('worker_threads').Worker;
   try {
     ({ Worker } = require('worker_threads') as typeof import('worker_threads'));
   } catch {
-    return runWorkspaceScan({ ...options, files, maxFileSize, runTaint });
+    return sync();
   }
 
   // The compiled worker lives next to this module in out/. When running
   // from ts source (tests), fall back to the sync path.
   const workerPath = path.join(__dirname, 'scanWorker.js');
   if (!fs.existsSync(workerPath)) {
-    return runWorkspaceScan({ ...options, files, maxFileSize, runTaint });
+    return sync();
   }
 
   const chunks = chunkEvenly(files, workerCount);
@@ -586,6 +621,7 @@ export async function runWorkspaceScanParallel(
     worker.once('message', (res: ScanWorkerResult) => {
       merged.push(...res.results);
       filesSkipped += res.filesSkipped;
+      diagnostics.push(...res.diagnostics);
     });
     worker.once('error', reject);
     worker.once('exit', code => {
@@ -598,5 +634,6 @@ export async function runWorkspaceScanParallel(
   // finished first.
   merged.sort((a, b) => a.filePath.localeCompare(b.filePath));
   const totalIssues = merged.reduce((n, r) => n + r.issues.length, 0);
-  return { results: merged, filesScanned: files.length, filesSkipped, totalIssues };
+  diagnostics.sort((a, b) => a.path.localeCompare(b.path) || (a.line || 0) - (b.line || 0));
+  return { results: merged, filesScanned: files.length - filesSkipped, filesSkipped, totalIssues, diagnostics };
 }

@@ -32,12 +32,15 @@ import * as path from 'path';
 import { getAllRules } from '../rules';
 import {
   SecuritySeverity,
+  SecurityCategory,
   SEVERITY_LABELS,
   CATEGORY_LABELS,
 } from '../types';
-import { walkFiles, runWorkspaceScanParallel, FileResult } from '../scanRunner';
+import { walkFiles, runWorkspaceScanParallel, FileResult, ScanDiagnostic } from '../scanRunner';
+import { formatScanSummary, ScanSummary } from '../scanReport';
 import { buildSARIF, resolveToolVersion } from '../sarif';
 import { loadBaseline, buildBaseline, writeBaseline, applyBaseline, Baseline } from '../baseline';
+import { buildGitComparisonBaseline } from '../gitBaseline';
 import { getChangedFilesSince } from '../gitDiff';
 import { loadIgnoreFile, isIgnored } from '../caspianIgnore';
 
@@ -55,6 +58,9 @@ export interface CliOptions {
   updateBaseline: boolean;
   changedSince?: string;
   concurrency?: number;
+  summaryPath?: string;
+  strict?: boolean;
+  newOnly?: boolean;
 }
 
 export function parseArgs(argv: string[]): CliOptions {
@@ -104,6 +110,15 @@ export function parseArgs(argv: string[]): CliOptions {
         opts.failOn = v;
         break;
       }
+      case '--new-only':
+        opts.newOnly = true;
+        break;
+      case '--summary':
+        opts.summaryPath = next();
+        break;
+      case '--strict':
+        opts.strict = true;
+        break;
       case '--include':
         opts.include.push(...next().split(',').map(s => s.trim()).filter(Boolean));
         break;
@@ -142,7 +157,9 @@ export function parseArgs(argv: string[]): CliOptions {
     }
   }
 
-  if (!fs.existsSync(opts.workspace)) {
+  if (opts.newOnly && !opts.changedSince) { throw new Error('--new-only requires --changed-since'); }
+  if (opts.newOnly && (opts.baselinePath || opts.updateBaseline)) { throw new Error('--new-only cannot be combined with an accepted baseline'); }
+  if (!fs.existsSync(opts.workspace) || !fs.statSync(opts.workspace).isDirectory()) {
     throw new Error(`workspace path does not exist: ${opts.workspace}`);
   }
   return opts;
@@ -151,6 +168,9 @@ export function parseArgs(argv: string[]): CliOptions {
 function printHelp(): void {
   process.stdout.write(
     'caspian-scan [path]\n' +
+    '  --summary <file>              write a Markdown report for GitHub or local review\n' +
+    '  --new-only                    compare findings against the merge base of --changed-since\n' +
+    '  --strict                      fail with exit 2 on any incomplete coverage\n' +
     '  --output <file>               write results to file (default: stdout)\n' +
     '  --format sarif|json|text      output format (default: sarif)\n' +
     '  --fail-on error|warning|info|never\n' +
@@ -162,7 +182,7 @@ function printHelp(): void {
     '  --concurrency <n>             worker threads for large scans (default: CPU count;\n' +
     '                                small scans run inline regardless)\n' +
     '  --baseline <file>             suppress findings listed in baseline; only NEW\n' +
-    '                                findings above the baseline count gate the build\n' +
+    '                                findings not matched by the baseline gate the build\n' +
     '  --update-baseline             regenerate <baseline> to match the current scan,\n' +
     '                                then exit 0. Use after an intentional rule change.\n' +
     '  --changed-since <ref>         only scan files that differ from <ref> in a\n' +
@@ -184,7 +204,7 @@ function toSARIF(results: FileResult[], toolVersion: string): string {
   return buildSARIF(results, toolVersion);
 }
 
-export function toJSONOutput(results: FileResult[]): string {
+export function toJSONOutput(results: FileResult[], summary?: ScanSummary): string {
   const issues = results.flatMap(r =>
     r.issues.map(issue => ({
       file: r.relativePath,
@@ -195,11 +215,11 @@ export function toJSONOutput(results: FileResult[]): string {
       category: CATEGORY_LABELS[issue.category],
       message: issue.message,
       suggestion: issue.suggestion,
-      pattern: issue.pattern,
+      pattern: issue.category === SecurityCategory.SecretsCredentials ? '[redacted]' : issue.pattern,
       confidence: issue.confidenceLevel,
     }))
   );
-  return JSON.stringify({ issues }, null, 2);
+  return JSON.stringify({ issues, ...(summary ? { summary } : {}) }, null, 2);
 }
 
 export function toText(results: FileResult[]): string {
@@ -253,7 +273,8 @@ export async function runScanCli(argv: string[] = process.argv.slice(2)): Promis
     process.exit(2);
   }
 
-  let files = walkFiles(opts.workspace, opts.exclude, opts.include);
+  const walkDiagnostics: ScanDiagnostic[] = [];
+  let files = walkFiles(opts.workspace, opts.exclude, opts.include, walkDiagnostics);
 
   // --changed-since: restrict the file set to what differs from the given
   // ref. Resolve before the scan loop so the "scanned N file(s)" counter
@@ -283,6 +304,7 @@ export async function runScanCli(argv: string[] = process.argv.slice(2)): Promis
     maxFileSize: opts.maxFileSize,
     concurrency: opts.concurrency,
   });
+  scan.diagnostics.unshift(...walkDiagnostics);
   let results: FileResult[] = scan.results;
   const filesSkipped = scan.filesSkipped;
 
@@ -307,6 +329,9 @@ export async function runScanCli(argv: string[] = process.argv.slice(2)): Promis
 
   // --update-baseline: write the current findings as the new baseline and exit.
   if (opts.updateBaseline) {
+    if (scan.diagnostics.length || (!files.length && !opts.changedSince)) {
+      throw new Error('Refusing to accept a baseline from an incomplete scan. Review exclusions and coverage first.');
+    }
     if (!opts.baselinePath) {
       process.stderr.write('caspian-scan: --update-baseline requires --baseline <file>\n');
       process.exit(2);
@@ -324,14 +349,19 @@ export async function runScanCli(argv: string[] = process.argv.slice(2)): Promis
   let newCount = totalIssues;
   let baselinedCount = 0;
   let resultsForOutput = results;
-  if (opts.baselinePath) {
+  if (opts.baselinePath || opts.newOnly) {
     let baseline: Baseline;
     try {
-      baseline = loadBaseline(opts.baselinePath);
+      if (opts.newOnly) {
+        const comparison = buildGitComparisonBaseline(opts.workspace, opts.changedSince!, files, opts.maxFileSize);
+        baseline = comparison.baseline;
+        scan.diagnostics.push(...comparison.diagnostics);
+      } else { baseline = loadBaseline(opts.baselinePath!); }
     } catch (err: any) {
       process.stderr.write(`caspian-scan: ${err.message}\n`);
       process.exit(2);
     }
+    if (baseline.version === 1) { process.stderr.write('caspian-scan: legacy count baseline; refresh it to use finding fingerprints.\n'); }
     const flat = results.flatMap(r => r.issues.map(i => ({ ...i, filePath: r.relativePath })));
     const applied = applyBaseline(flat, baseline);
     baselinedCount = applied.baselined.length;
@@ -352,31 +382,48 @@ export async function runScanCli(argv: string[] = process.argv.slice(2)): Promis
 
   // Summarise to stderr so piping --format=sarif works.
   const ignoredNote = ignoredCount > 0 ? `, ${ignoredCount} ignored via .caspianignore` : '';
-  if (opts.baselinePath) {
+  if (opts.baselinePath || opts.newOnly) {
     process.stderr.write(
-      `caspian-scan: scanned ${files.length} file(s)${changedSinceNote}, ${filesSkipped} skipped, ` +
+      `caspian-scan: scanned ${scan.filesScanned} file(s)${changedSinceNote}, ${filesSkipped} skipped, ` +
       `${totalIssues} finding(s) (${baselinedCount} baselined, ${newCount} new)${ignoredNote}\n`
     );
   } else {
     process.stderr.write(
-      `caspian-scan: scanned ${files.length} file(s)${changedSinceNote}, ${filesSkipped} skipped, ${totalIssues} finding(s)${ignoredNote}\n`
+      `caspian-scan: scanned ${scan.filesScanned} file(s)${changedSinceNote}, ${filesSkipped} skipped, ${totalIssues} finding(s)${ignoredNote}\n`
     );
   }
 
+  const incomplete = scan.diagnostics.length > 0 || (!files.length && !opts.changedSince);
+  const summary: ScanSummary = {
+    status: incomplete ? 'incomplete' : newCount ? 'findings' : 'passed',
+    filesScanned: scan.filesScanned, filesSkipped, findings: newCount,
+    baselined: baselinedCount, ignored: ignoredCount, diagnostics: scan.diagnostics,
+  };
+  if (incomplete) { process.stderr.write('caspian-scan: INCOMPLETE coverage; inspect the summary. Use --strict to reject all coverage gaps.\n'); }
+  if (opts.summaryPath) { fs.writeFileSync(opts.summaryPath, formatScanSummary(summary, resultsForOutput), 'utf-8'); }
   let output: string;
   switch (opts.format) {
-    case 'json': output = toJSONOutput(resultsForOutput); break;
-    case 'text': output = toText(resultsForOutput); break;
+    case 'json': output = toJSONOutput(resultsForOutput, summary); break;
+    case 'text': output = toText(resultsForOutput) + '\nCoverage: ' + summary.status + '\n' + scan.diagnostics.map(d => d.path + ': ' + d.reason).join('\n'); break;
     case 'sarif':
     default: output = toSARIF(resultsForOutput, resolveVersion());
   }
 
+  if (opts.format === 'sarif') {
+    const sarif = JSON.parse(output);
+    sarif.runs[0].invocations = [{ executionSuccessful: !incomplete,
+      toolExecutionNotifications: scan.diagnostics.map(d => ({ level: 'warning', message: { text: d.path + ': ' + d.reason } })),
+    }];
+    sarif.runs[0].properties = { caspianSummary: summary };
+    output = JSON.stringify(sarif, null, 2);
+  }
   if (opts.output) {
     fs.writeFileSync(opts.output, output, 'utf-8');
   } else {
     process.stdout.write(output + '\n');
   }
 
+  if ((opts.strict && incomplete) || scan.diagnostics.some(d => ['unreadable', 'timeout', 'analysis-error'].includes(d.reason))) { process.exit(2); }
   process.exit(meetsFailThreshold(worstSeverity(resultsForOutput), opts.failOn) ? 1 : 0);
 }
 

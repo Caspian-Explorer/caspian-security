@@ -1,24 +1,5 @@
-/**
- * `caspian init [path]` — one-command agent-loop setup for a project.
- *
- * What it does (idempotently — safe to re-run):
- *   1. Detects which agents are configured (.claude/, CLAUDE.md, .cursor/,
- *      .cursorrules, AGENTS.md, .mcp.json).
- *   2. Writes or MERGES `.mcp.json` so the caspian MCP server is available
- *      (existing servers are never touched).
- *   3. Appends the security-scanning rules block to existing rules files
- *      (CLAUDE.md / AGENTS.md / .cursorrules), between
- *      `<!-- caspian:start -->` … `<!-- caspian:end -->` markers. On
- *      re-run the block is replaced in place. If no rules file exists,
- *      AGENTS.md is created.
- *   4. Runs a baseline scan and writes `.caspian/baseline.json` (unless
- *      one exists), so the first in-loop experience reports only findings
- *      the agent actually introduces.
- *
- * This is the ONE Caspian command that writes into a user's repository —
- * running it is the consent. Everything it writes is printed, and
- * `snippet` / `mcp-config` remain available for manual, print-only setup.
- */
+/** Project onboarding: advisory GitHub checks, optional agent integration,
+ * read-only preview, and explicit acceptance of existing findings. */
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -32,9 +13,10 @@ import {
   CASPIAN_MARKER_END,
   buildLoopRulesBlock,
 } from '../integration/agentSnippets';
+import { buildGitHubWorkflow } from '../integration/githubWorkflow';
 import { SEVERITY_LABELS } from '../types';
 
-interface InitReport {
+export interface InitReport {
   actions: string[];
   notes: string[];
 }
@@ -50,9 +32,16 @@ export function mergeMcpJson(workspace: string, report: InitReport): void {
       report.notes.push('.mcp.json exists but is not valid JSON — left untouched. Add the caspian server manually (`caspian mcp-config`).');
       return;
     }
-    if (!root || typeof root !== 'object') { root = {}; }
+    if (!root || typeof root !== 'object' || Array.isArray(root)) {
+      report.notes.push('.mcp.json must contain an object; left untouched.');
+      return;
+    }
   }
-  if (!root.mcpServers || typeof root.mcpServers !== 'object') { root.mcpServers = {}; }
+  if (root.mcpServers !== undefined && (!root.mcpServers || typeof root.mcpServers !== 'object' || Array.isArray(root.mcpServers))) {
+    report.notes.push('.mcp.json has an invalid mcpServers object; left untouched.');
+    return;
+  }
+  root.mcpServers ??= {};
   if (root.mcpServers['caspian-security']) {
     report.notes.push('.mcp.json already has a caspian-security server — left as-is.');
     return;
@@ -99,6 +88,9 @@ function writeBaselineIfAbsent(workspace: string, report: InitReport): void {
   }
   const ignoreEntries = loadIgnoreFile(workspace);
   const scan = runWorkspaceScan({ workspace });
+  if (scan.diagnostics.length || !scan.filesScanned) {
+    throw new Error('Baseline scan incomplete; review coverage with caspian scan before accepting findings.');
+  }
   const flat = scan.results.flatMap(r =>
     r.issues
       .filter(i => !isIgnored(ignoreEntries, i.code, r.relativePath, i.line))
@@ -122,71 +114,120 @@ function writeBaselineIfAbsent(workspace: string, report: InitReport): void {
   report.notes.push('Agent-loop scans report only NEW findings beyond the baseline. Commit the baseline file.');
 }
 
+export interface InitOptions {
+  workspace: string;
+  github: boolean;
+  agent: boolean;
+  dryRun: boolean;
+  acceptBaseline: boolean;
+  actionRef: string;
+}
+
+export function parseInitArgs(argv: string[]): InitOptions {
+  const opts: InitOptions = { workspace: process.cwd(), github: false, agent: false,
+    dryRun: false, acceptBaseline: false, actionRef: 'main' };
+  let positional = false;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--github') { opts.github = true; }
+    else if (a === '--agent') { opts.agent = true; }
+    else if (a === '--dry-run') { opts.dryRun = true; }
+    else if (a === '--accept-baseline') { opts.acceptBaseline = true; }
+    else if (a === '--action-ref') {
+      const ref = argv[++i];
+      if (!ref) { throw new Error('--action-ref requires a value'); }
+      opts.actionRef = ref;
+    } else if (a.startsWith('-')) { throw new Error('Unknown flag: ' + a); }
+    else if (positional) { throw new Error('Only one workspace path is allowed'); }
+    else { opts.workspace = path.resolve(a); positional = true; }
+  }
+  if (!opts.github) { opts.agent = true; }
+  buildGitHubWorkflow(opts.actionRef); // Validate before any writes.
+  if (!fs.statSync(opts.workspace).isDirectory()) { throw new Error('Workspace must be a directory'); }
+  return opts;
+}
+
+export function detectProjectStack(workspace: string): string[] {
+  const stack: string[] = [];
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(workspace, 'package.json'), 'utf-8'));
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    if (deps.typescript || fs.existsSync(path.join(workspace, 'tsconfig.json'))) { stack.push('TypeScript'); }
+    for (const [dep, label] of [['next', 'Next.js'], ['@supabase/supabase-js', 'Supabase'],
+      ['firebase', 'Firebase'], ['openai', 'OpenAI API'], ['@anthropic-ai/sdk', 'Anthropic API'], ['ai', 'AI SDK']]) {
+      if (deps[dep]) { stack.push(label); }
+    }
+  } catch { /* stack detection is informational, not a prerequisite */ }
+  if (fs.existsSync(path.join(workspace, 'requirements.txt'))) { stack.push('Python'); }
+  return stack;
+}
+
+export function initializeProject(opts: InitOptions): InitReport {
+  const report: InitReport = { actions: [], notes: [] };
+  const stack = detectProjectStack(opts.workspace);
+  if (stack.length) { report.notes.push('Detected: ' + stack.join(', ') + '. All supported rules remain enabled.'); }
+  if (opts.github) {
+    const rel = '.github/workflows/caspian-security.yml';
+    const target = path.join(opts.workspace, rel);
+    const content = buildGitHubWorkflow(opts.actionRef);
+    if (fs.existsSync(target)) { report.notes.push(rel + ' already exists; kept unchanged.'); }
+    else if (opts.dryRun) { report.actions.push('Would create ' + rel + ':\n' + content); }
+    else {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, content, { encoding: 'utf-8', flag: 'wx' });
+      report.actions.push('Created ' + rel + ' in advisory mode (findings do not fail the check).');
+    }
+    report.notes.push('Commit the workflow and open a pull request. Read the Caspian job summary and report artifact.');
+    report.notes.push('SARIF upload is optional; no Code Security subscription or extra token is needed for job summaries.');
+  }
+  if (opts.agent) {
+    if (opts.dryRun) {
+      report.actions.push('Would merge the caspian-security server into .mcp.json and update agent instruction blocks.');
+    } else {
+      mergeMcpJson(opts.workspace, report);
+      const targets: Array<{ file: string; agent: 'claude' | 'cursor' | 'generic' }> = [];
+      for (const [name, agent] of [['CLAUDE.md', 'claude'], ['AGENTS.md', 'generic'], ['.cursorrules', 'cursor']] as const) {
+        const file = path.join(opts.workspace, name);
+        if (fs.existsSync(file) || (agent === 'cursor' && fs.existsSync(path.join(opts.workspace, '.cursor')))) {
+          targets.push({ file, agent });
+        }
+      }
+      if (!targets.length) { targets.push({ file: path.join(opts.workspace, 'AGENTS.md'), agent: 'generic' }); }
+      for (const t of targets) {
+        if (upsertRulesBlock(t.file, buildLoopRulesBlock(t.agent))) {
+          report.actions.push('Updated ' + path.relative(opts.workspace, t.file));
+        }
+      }
+    }
+  }
+  if (opts.acceptBaseline) {
+    if (opts.dryRun) { report.actions.push('Would scan and accept existing findings into ' + DEFAULT_BASELINE_PATH + ' if absent.'); }
+    else { writeBaselineIfAbsent(opts.workspace, report); }
+  } else {
+    report.notes.push('Existing findings have not been accepted automatically. Review them before running caspian baseline accept.');
+  }
+  return report;
+}
+
 function printHelp(): void {
-  process.stdout.write(
-    'caspian init [path]\n' +
-    '\n' +
-    'Sets up Caspian Security for AI-agent workflows in one command:\n' +
-    '  - writes/merges .mcp.json with the caspian MCP server\n' +
-    '  - appends the security-scanning rules block to CLAUDE.md / AGENTS.md /\n' +
-    '    .cursorrules (idempotent, between <!-- caspian:start/end --> markers)\n' +
-    '  - runs a baseline scan into .caspian/baseline.json so only NEW findings\n' +
-    '    surface in the agent loop\n' +
-    '\n' +
-    'Claude Code users: the Caspian plugin (hooks + MCP + /ship-check) is the\n' +
-    'richer integration — see the README. `init` covers Cursor and other agents.\n'
-  );
+  process.stdout.write([
+    'caspian init [path] [--github] [--agent] [--dry-run]',
+    '  --github           Add a GitHub PR workflow in advisory mode; preserve an existing workflow.',
+    '  --agent            Also configure MCP and agent rules (default when --github is absent).',
+    '  --dry-run          Preview setup without changing files.',
+    '  --action-ref REF   Caspian action branch/tag/SHA (default main; pin a reviewed SHA for enforcement).',
+    '  --accept-baseline  Explicitly accept existing findings if no baseline exists.',
+    '', 'Examples:', '  caspian init --github --dry-run', '  caspian init --github',
+    '  caspian init --github --agent', '',
+  ].join('\n'));
 }
 
 export function runInitCli(argv: string[]): void {
-  let workspace = process.cwd();
-  for (const a of argv) {
-    if (a === '-h' || a === '--help') { printHelp(); process.exit(0); }
-    else if (a.startsWith('-')) {
-      process.stderr.write(`caspian init: unknown flag ${a}\n`);
-      printHelp();
-      process.exit(2);
-    } else { workspace = path.resolve(a); }
-  }
-  if (!fs.existsSync(workspace)) {
-    process.stderr.write(`caspian init: path does not exist: ${workspace}\n`);
-    process.exit(2);
-  }
-
-  const report: InitReport = { actions: [], notes: [] };
-
-  mergeMcpJson(workspace, report);
-
-  // Rules files: update every one that exists; create AGENTS.md when none do.
-  const claudeMd = path.join(workspace, 'CLAUDE.md');
-  const agentsMd = path.join(workspace, 'AGENTS.md');
-  const cursorRules = path.join(workspace, '.cursorrules');
-  const targets: Array<{ file: string; agent: 'claude' | 'cursor' | 'generic' }> = [];
-  if (fs.existsSync(claudeMd)) { targets.push({ file: claudeMd, agent: 'claude' }); }
-  if (fs.existsSync(agentsMd)) { targets.push({ file: agentsMd, agent: 'generic' }); }
-  if (fs.existsSync(cursorRules) || fs.existsSync(path.join(workspace, '.cursor'))) {
-    targets.push({ file: cursorRules, agent: 'cursor' });
-  }
-  if (targets.length === 0) { targets.push({ file: agentsMd, agent: 'generic' }); }
-
-  for (const t of targets) {
-    const changed = upsertRulesBlock(t.file, buildLoopRulesBlock(t.agent));
-    const rel = path.relative(workspace, t.file);
-    if (changed) { report.actions.push(`wrote the security-scanning rules block to ${rel}`); }
-    else { report.notes.push(`${rel} already up to date.`); }
-  }
-
-  if (fs.existsSync(path.join(workspace, '.claude'))) {
-    report.notes.push(
-      'Claude Code detected: the Caspian plugin adds write-time blocking and ' +
-      'post-edit scanning hooks on top of this setup — see the README.'
-    );
-  }
-
-  writeBaselineIfAbsent(workspace, report);
-
-  process.stdout.write('caspian init:\n');
-  for (const a of report.actions) { process.stdout.write(`  + ${a}\n`); }
-  for (const n of report.notes) { process.stdout.write(`  · ${n}\n`); }
+  if (argv.includes('--help') || argv.includes('-h')) { printHelp(); process.exit(0); }
+  const options = parseInitArgs(argv);
+  const report = initializeProject(options);
+  process.stdout.write(options.dryRun ? 'Caspian setup preview:\n' : 'Caspian setup:\n');
+  for (const a of report.actions) { process.stdout.write('  + ' + a + '\n'); }
+  for (const n of report.notes) { process.stdout.write('  ' + n + '\n'); }
   process.exit(0);
 }
