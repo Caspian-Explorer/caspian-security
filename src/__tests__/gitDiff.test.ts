@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { execFileSync } from 'child_process';
 import { getChangedFilesSince } from '../gitDiff';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -16,23 +17,23 @@ describe('getChangedFilesSince', () => {
   });
 
   it('returns absolute paths when there is a diff', () => {
-    // HEAD~1...HEAD — whatever the last commit touched. In a shallow clone
-    // (actions/checkout default) HEAD~1 is unreachable — tolerate that by
-    // skipping the assertion when the ref doesn't resolve.
-    let result;
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'caspian-diff-fixture-'));
+    const git = (...args: string[]) => execFileSync('git', ['-C', tmp, ...args], { stdio: 'pipe' });
     try {
-      result = getChangedFilesSince(REPO_ROOT, 'HEAD~1');
-    } catch (err: any) {
-      if (/unknown revision/.test(err.message) || /does not have any commits/.test(err.message)) {
-        // Shallow clone on CI — acceptable skip.
-        return;
-      }
-      throw err;
-    }
-    expect(result.files.size).toBeGreaterThanOrEqual(0);
-    for (const f of result.files) {
-      expect(path.isAbsolute(f)).toBe(true);
-      expect(f.startsWith(REPO_ROOT)).toBe(true);
+      git('init');
+      git('config', 'user.name', 'Caspian Test');
+      git('config', 'user.email', 'test@example.invalid');
+      fs.writeFileSync(path.join(tmp, 'app.ts'), 'const value = 1;\n');
+      git('add', '.');
+      git('commit', '-m', 'base');
+      fs.writeFileSync(path.join(tmp, 'app.ts'), 'const value = 2;\n');
+      git('add', '.');
+      git('commit', '-m', 'change');
+      const result = getChangedFilesSince(tmp, 'HEAD~1');
+      expect(result.diffCount).toBe(1);
+      expect([...result.files]).toEqual([path.join(tmp, 'app.ts')]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
 
