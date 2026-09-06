@@ -3572,7 +3572,7 @@ var deployConfigRules = [
   },
   {
     code: "DEPLOY008",
-    message: "This server endpoint calls a paid AI model with no rate limit in sight. Anyone who finds the URL can call it in a loop and run up an unbounded model bill \u2014 LLM endpoints are actively scanned for.",
+    message: "This endpoint calls a paid AI model. Verify that authentication, rate limits, and spend controls protect this specific call. Imports and comments do not prove enforcement.",
     severity: 1 /* Warning */,
     patterns: [
       /\.chat\.completions\.create\s*\(/,
@@ -3581,15 +3581,6 @@ var deployConfigRules = [
       /\bgetGenerativeModel\s*\(/,
       /\breplicate\.run\s*\(/i
     ],
-    suppressIfNearby: [
-      /rate[-_ ]?limit/i,
-      /\blimiter\b/i,
-      /\bupstash\b/i,
-      /\bthrottl/i,
-      /\barcjet\b/i,
-      /\bslowdown\b/i
-    ],
-    suppressNearbyWindow: 400,
     suggestion: "Add a per-IP or per-user rate limit before the model call (e.g. @upstash/ratelimit or express-rate-limit), and consider a spend cap with the model provider.",
     category: "api-security" /* APISecurity */,
     ruleType: ruleType10,
@@ -4470,6 +4461,9 @@ function getAllRules() {
   return Object.values(resolvedRulesByCategory).flat();
 }
 
+// src/scanRunner.ts
+var import_crypto = require("crypto");
+
 // src/generatedFileDetector.ts
 function isGeneratedFile(filePath, content) {
   if (isGeneratedByPath(filePath)) {
@@ -5046,11 +5040,14 @@ var ASSIGN_DECL = /(?:^|\s)(?:const|let|var)\s+(\{[^}]+\}|\[[^\]]+\]|[\w$]+)\s*=
 var ASSIGN_REASSIGN = /^\s*([\w$]+)\s*=\s*(.+);?$/;
 var SIMPLE_VAR = /^[\w$]+$/;
 var MAX_TAINTED_VARS = 50;
-function runTaintAnalysis(text, deadlineMs = 100) {
+function runTaintAnalysis(text, deadlineMs = 100, onTimeout) {
   const startedAt = Date.now();
   const deadlineAt = startedAt + deadlineMs;
   const lines = normaliseLineEndings(text).split("\n");
   const ranges = findFunctionRanges(lines, deadlineAt);
+  if (Date.now() > deadlineAt) {
+    onTimeout?.();
+  }
   if (ranges.length === 0) {
     return [];
   }
@@ -5058,6 +5055,7 @@ function runTaintAnalysis(text, deadlineMs = 100) {
   let walkedMaxEnd = -1;
   for (const range of ranges) {
     if (Date.now() > deadlineAt) {
+      onTimeout?.();
       break;
     }
     if (range.endLine <= walkedMaxEnd) {
@@ -5285,10 +5283,12 @@ function scanFile(filePath, text, rules, optionsOrRunTaint = {}) {
   const advisoryRules = options.advisorySink ? rules.filter((r) => r.ruleType === "project-advisory" /* ProjectAdvisory */) : [];
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {
     if (lineNum % 25 === 0 && lineNum > 0 && Date.now() > deadline) {
+      options.onIncomplete?.("timeout", lineNum + 1);
       break;
     }
     const line = lines[lineNum];
     if (line.length > 2e3) {
+      options.onIncomplete?.("long-line", lineNum + 1);
       continue;
     }
     const lineLower = line.toLowerCase();
@@ -5319,6 +5319,7 @@ function scanFile(filePath, text, rules, optionsOrRunTaint = {}) {
             }
           }
         } catch {
+          options.onIncomplete?.("analysis-error", lineNum + 1);
           continue;
         }
         if (!matched) {
@@ -5434,11 +5435,12 @@ function scanFile(filePath, text, rules, optionsOrRunTaint = {}) {
   }
   if (options.runTaint !== false) {
     try {
-      const taintFindings = runTaintAnalysis(text, 100);
+      const taintFindings = runTaintAnalysis(text, 100, () => options.onIncomplete?.("timeout"));
       for (const t of taintFindings) {
         issues.push(t);
       }
     } catch {
+      options.onIncomplete?.("analysis-error");
     }
   }
   for (const candidates of informationalCandidates.values()) {
@@ -5446,6 +5448,9 @@ function scanFile(filePath, text, rules, optionsOrRunTaint = {}) {
       continue;
     }
     issues.push(pickBestInformationalCandidate(candidates, lines));
+  }
+  for (const issue of issues) {
+    issue.fingerprint = (0, import_crypto.createHash)("sha256").update(JSON.stringify([issue.code, (lines[issue.line] || "").trim()])).digest("hex");
   }
   return issues;
 }
@@ -5550,6 +5555,7 @@ function isIgnored(entries, ruleCode, relativePath, issueLine) {
 // src/baseline.ts
 var fs2 = __toESM(require("fs"));
 var path2 = __toESM(require("path"));
+var import_crypto2 = require("crypto");
 var DEFAULT_BASELINE_PATH = path2.join(".caspian", "baseline.json");
 function normalisePath(filePath) {
   return filePath.replace(/\\/g, "/");
@@ -5567,8 +5573,8 @@ function loadBaseline(filePath) {
   } catch (err) {
     throw new Error(`baseline file is not valid JSON: ${filePath} (${err.message})`);
   }
-  if (!parsed || parsed.version !== 1 || typeof parsed.counts !== "object") {
-    throw new Error(`baseline file has unsupported shape (expected { version: 1, counts: {...} }): ${filePath}`);
+  if (!parsed || ![1, 2].includes(parsed.version) || !parsed.counts || typeof parsed.counts !== "object" || Array.isArray(parsed.counts) || parsed.version === 2 && (!parsed.fingerprints || typeof parsed.fingerprints !== "object" || Array.isArray(parsed.fingerprints))) {
+    throw new Error(`baseline file has unsupported shape (expected a version 1 count or version 2 fingerprint baseline): ${filePath}`);
   }
   return parsed;
 }
@@ -5580,6 +5586,25 @@ function loadDefaultBaseline(workspaceRoot) {
   }
 }
 function applyBaseline(issues, baseline) {
+  if (baseline.version === 2) {
+    const baselined2 = [];
+    const newFindings2 = [];
+    const used = /* @__PURE__ */ new Map();
+    for (const issue of issues) {
+      const file = normalisePath(issue.filePath);
+      const identity = findingIdentity(issue);
+      const key = JSON.stringify([file, issue.code, identity]);
+      const budget = baseline.fingerprints?.[file]?.[issue.code]?.[identity];
+      const consumed = used.get(key) || 0;
+      if (typeof budget === "number" && Number.isSafeInteger(budget) && consumed < budget) {
+        baselined2.push(issue);
+        used.set(key, consumed + 1);
+      } else {
+        newFindings2.push(issue);
+      }
+    }
+    return { baselined: baselined2, newFindings: newFindings2 };
+  }
   const groups = /* @__PURE__ */ new Map();
   for (const issue of issues) {
     const key = `${normalisePath(issue.filePath)}${issue.code}`;
@@ -5601,6 +5626,9 @@ function applyBaseline(issues, baseline) {
     }
   }
   return { baselined, newFindings };
+}
+function findingIdentity(issue) {
+  return issue.fingerprint || (0, import_crypto2.createHash)("sha256").update(JSON.stringify([issue.code, issue.pattern, issue.line, issue.column])).digest("hex");
 }
 
 // src/fileConfig.ts

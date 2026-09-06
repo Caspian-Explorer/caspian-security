@@ -112,7 +112,7 @@ caspian <command> [options]
   scan-file <file>      Single-file scan, only NEW findings beyond the baseline
   ship-check [path]     Pre-deploy check (open DB rules, exposed secrets, AI endpoints)
   baseline accept       Accept current findings into .caspian/baseline.json
-  init [path]           One-command AI-agent setup (.mcp.json + rules block + baseline)
+  init [path]           One-command AI-agent setup (.mcp.json + rules block; baseline acceptance is explicit)
   git-history [path]    Walk git history for leaked secrets
   check-updates [path]  npm audit + stack version checks (--osv: OSV.dev multi-ecosystem)
   mcp                   Start the MCP server (stdio)
@@ -218,7 +218,7 @@ caspian scan . --baseline .caspian-baseline.json --update-baseline
 caspian scan . --baseline .caspian-baseline.json --fail-on error
 ```
 
-Commit `.caspian-baseline.json` to the repo. It's count-based (per file, per rule) so it stays readable and auto-tightens as you fix things.
+Commit `.caspian-baseline.json` to the repo. New version 2 baselines match source fingerprints per file and rule. Legacy version 1 count baselines remain readable; regenerate them after reviewing findings to migrate.
 
 ### 3.5 PR-scope scanning (`--changed-since`)
 
@@ -238,7 +238,7 @@ Four commands added in 10.12.0 for AI-agent workflows (they also work fine for h
 caspian scan-file src/app/api/chat/route.ts   # one file, only NEW findings; exit 1 if blocking
 caspian ship-check .                          # pre-deploy gate; ignores the baseline on purpose
 caspian baseline accept .                     # accept current findings → .caspian/baseline.json
-caspian init .                                # set up MCP + rules block + baseline in one shot
+caspian init .                                # set up MCP + rules block; add --accept-baseline only after review
 ```
 
 `scan-file` uses the same pipeline as the Claude Code hooks and the `security_scan_file` MCP tool — baseline-filtered, `.caspianignore`- and `caspian.config.json`-aware, with the derived critical/high/medium/low loop severity. `ship-check` also flags credential files tracked by git (`.env`, `*.pem`, SSH keys, service-account JSON). `baseline accept` is deliberately CLI-only: agents have no tool to silence their own findings. See [§5](#5-ai-agent-integration) for how these fit the agent loop, and [§7.4](#74-caspianconfigjson) for `caspian.config.json`.
@@ -324,7 +324,7 @@ Install inside Claude Code:
 
 Then run `caspian baseline accept` once so pre-existing findings don't flood the loop — only NEW findings surface. A loop guard downgrades any finding that has already blocked twice (no block ping-pong), and **every failure mode fails open**: if the scanner crashes, your session continues untouched. `/caspian-security:ship-check` runs the pre-deploy check on demand.
 
-For Cursor and other MCP agents, `caspian init` does the setup in one command: merges `.mcp.json`, writes the rules block into CLAUDE.md / AGENTS.md / `.cursorrules` between `<!-- caspian:start/end -->` markers (idempotent — re-running updates in place), and runs the baseline scan. `init` is the one Caspian command that writes into your repo; running it is the consent, and everything it writes is printed.
+For Cursor and other MCP agents, `caspian init` does the setup in one command: merges `.mcp.json`, writes the rules block into CLAUDE.md / AGENTS.md / `.cursorrules` between `<!-- caspian:start/end -->` markers (idempotent — re-running updates in place), and accepts existing findings only when --accept-baseline is supplied. `init` is the one Caspian command that writes into your repo; running it is the consent, and everything it writes is printed.
 
 ### Route 1 — one line in the agent's rules (any agent with a shell)
 
@@ -484,9 +484,9 @@ Lines starting with `#` are comments. The line number is optional (omit it to su
 
 ### 7.3 Baseline file
 
-`.caspian-baseline.json` (see [3.4](#34-baselines)) — generated/updated with `--update-baseline`, consumed with `--baseline`. Count-based per file/rule; commit it to the repo.
+`.caspian-baseline.json` (see [3.4](#34-baselines)) — generated/updated with `--update-baseline`, consumed with `--baseline`. Version 2 uses source fingerprints per file/rule; commit it to the repo.
 
-The agent-loop surfaces (`scan-file`, `security_scan_file`, `security_scan_changes`, and the plugin hooks) use a fixed location instead: **`.caspian/baseline.json`**, written by `caspian baseline accept` or `caspian init`. Same format; commit it too.
+The agent-loop surfaces (`scan-file`, `security_scan_file`, `security_scan_changes`, and the plugin hooks) use a fixed location instead: **`.caspian/baseline.json`**, written by `caspian baseline accept` or `caspian init --accept-baseline`. Same format; commit it too.
 
 ### 7.4 `caspian.config.json`
 
@@ -614,7 +614,7 @@ Something at/above your `--fail-on` threshold fired. Search the output for `"sev
 No. The CLI, MCP server, and rule engine run entirely locally with no telemetry or network access. Only the optional **AI Fix** feature (opt-in, per-invocation consent) sends the minimal context you approve to your chosen provider.
 
 **Will running it change my repo?**
-Scanning is read-only. The one exception is `caspian init` (added 10.12.0), which — because you explicitly run it — merges `.mcp.json`, writes the marker-delimited rules block, and creates `.caspian/baseline.json`, printing everything it touched. `snippet` and `mcp-config` remain print-only.
+Scanning is read-only. The one exception is `caspian init` (added 10.12.0), which — because you explicitly run it — merges `.mcp.json`, writes the marker-delimited rules block, and optionally creates `.caspian/baseline.json` with --accept-baseline, printing everything it touched. `snippet` and `mcp-config` remain print-only.
 
 **Which path does `caspian scan` accept?**
 A **directory** (defaults to the current directory). It walks the tree for supported file types. For a single file, use `caspian scan-file <file>`.
@@ -641,7 +641,7 @@ caspian check-updates . --osv                     # + OSV.dev check of non-npm m
 caspian scan-file src/api/route.ts                # one file, only NEW findings
 caspian ship-check .                              # pre-deploy gate (baseline ignored)
 caspian baseline accept .                         # accept findings → .caspian/baseline.json
-caspian init .                                    # MCP + rules block + baseline in one shot
+caspian init .                                    # MCP + rules block; add --accept-baseline only after review
 
 # AI agents
 caspian snippet --agent claude --mode after-edits # CLAUDE.md block

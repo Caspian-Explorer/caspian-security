@@ -74,6 +74,8 @@ export interface SecurityRule {
 }
 
 export interface SecurityIssue {
+  /** Hash of the rule and source line; contains no source text. */
+  fingerprint?: string;
   line: number;
   column: number;
   message: string;

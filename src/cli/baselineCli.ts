@@ -21,7 +21,7 @@ function printHelp(): void {
     '\n' +
     `Scans the workspace and writes every current finding to ${DEFAULT_BASELINE_PATH}\n` +
     'as accepted. From then on, agent-loop scans (hooks, security_scan_file,\n' +
-    'security_scan_changes) report only NEW findings beyond these counts.\n' +
+    'security_scan_changes) report only NEW findings beyond the accepted source fingerprints.\n' +
     'Review and commit the baseline file like any other change.\n' +
     '\n' +
     'Note: `caspian ship-check` ignores the baseline on purpose.\n'
@@ -55,6 +55,9 @@ export function runBaselineCli(argv: string[]): void {
 
   const ignoreEntries = loadIgnoreFile(workspace);
   const scan = runWorkspaceScan({ workspace });
+  if (scan.diagnostics.length || !scan.filesScanned) {
+    throw new Error('Cannot accept an incomplete scan. Review coverage with caspian scan first.');
+  }
   const flat = scan.results.flatMap(r =>
     r.issues
       .filter(i => !isIgnored(ignoreEntries, i.code, r.relativePath, i.line))

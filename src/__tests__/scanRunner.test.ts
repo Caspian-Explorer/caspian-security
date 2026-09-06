@@ -244,7 +244,9 @@ describe('runWorkspaceScan', () => {
 
   it('scans eligible files and reports findings with relative paths', () => {
     const result = runWorkspaceScan({ workspace: dir, runTaint: false });
-    expect(result.filesScanned).toBeGreaterThanOrEqual(2);
+    expect(result.filesScanned).toBeGreaterThanOrEqual(1);
+    expect(result.filesSkipped).toBeGreaterThanOrEqual(1);
+    expect(result.diagnostics.length).toBeGreaterThan(0);
     const insecure = result.results.find(r => r.relativePath.endsWith('insecure.js'));
     expect(insecure).toBeDefined();
     expect(insecure!.issues.some(i => i.code.startsWith('CRED'))).toBe(true);

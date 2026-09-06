@@ -16,7 +16,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawnSync } from 'child_process';
-import { runWorkspaceScan, FileResult } from '../scanRunner';
+import { runWorkspaceScan, FileResult, ScanDiagnostic } from '../scanRunner';
 import { SecurityCategory, SecuritySeverity } from '../types';
 import { loadIgnoreFile, isIgnored } from '../caspianIgnore';
 import { loadFileConfig } from '../fileConfig';
@@ -69,6 +69,9 @@ export interface ShipCheckResult {
   findings: LoopFinding[];
   trackedCredentials: TrackedCredentialFile[];
   filesScanned: number;
+  filesSkipped: number;
+  diagnostics: ScanDiagnostic[];
+  complete: boolean;
 }
 
 /** Shared by the CLI below and the `check_deployment_security` MCP tool. */
@@ -96,6 +99,9 @@ export function runShipCheck(workspace: string): ShipCheckResult {
     findings,
     trackedCredentials: findTrackedCredentialFiles(workspace),
     filesScanned: scan.filesScanned,
+    filesSkipped: scan.filesSkipped,
+    diagnostics: scan.diagnostics,
+    complete: scan.diagnostics.length === 0 && scan.filesScanned > 0,
   };
 }
 
@@ -104,8 +110,13 @@ const ORDER: Array<LoopFinding['loopSeverity']> = ['critical', 'high', 'medium',
 export function formatShipCheckReport(result: ShipCheckResult): string {
   const lines: string[] = [];
   const total = result.findings.length + result.trackedCredentials.length;
-  if (total === 0) {
-    return `Ship check: no deployment-security findings across ${result.filesScanned} file(s). Clear to launch.`;
+  if (!result.complete) {
+    lines.push('Ship check INCOMPLETE: ' + result.filesScanned + ' file(s) analyzed, ' + result.filesSkipped + ' skipped.');
+    lines.push(...result.diagnostics.slice(0, 30).map(d => '  ' + d.path + ': ' + d.reason));
+    if (!result.filesScanned) { lines.push('No supported files were analyzed.'); }
+  }
+  if (total === 0 && result.complete) {
+    return `Ship check: no deployment-security findings across ${result.filesScanned} file(s). No blocking findings in completed checks; this is not a deployment safety certification.`;
   }
 
   lines.push(`Ship check: ${total} deployment-security finding(s) across ${result.filesScanned} scanned file(s)`);
@@ -131,6 +142,7 @@ export function formatShipCheckReport(result: ShipCheckResult): string {
 
 export function shipCheckBlocks(result: ShipCheckResult): boolean {
   return (
+    !result.complete ||
     result.trackedCredentials.length > 0 ||
     result.findings.some(f => f.loopSeverity === 'critical' || f.loopSeverity === 'high')
   );
@@ -178,7 +190,10 @@ export function runShipCheckCli(argv: string[]): void {
 
   if (json) {
     process.stdout.write(JSON.stringify({
+      status: !result.complete ? 'incomplete' : shipCheckBlocks(result) ? 'findings' : 'passed',
       filesScanned: result.filesScanned,
+      filesSkipped: result.filesSkipped,
+      diagnostics: result.diagnostics,
       trackedCredentials: result.trackedCredentials,
       findings: result.findings.map(f => ({
         file: f.relativePath,
@@ -192,5 +207,5 @@ export function runShipCheckCli(argv: string[]): void {
   } else {
     process.stdout.write(formatShipCheckReport(result) + '\n');
   }
-  process.exit(shipCheckBlocks(result) ? 1 : 0);
+  process.exit(!result.complete ? 2 : shipCheckBlocks(result) ? 1 : 0);
 }

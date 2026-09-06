@@ -15,6 +15,8 @@ import {
   handleExplainRule,
   dispatchTool,
 } from '../cli/mcpServer';
+import { scanFile } from '../scanRunner';
+import { getAllRules } from '../rules';
 import { DEFAULT_BASELINE_PATH, buildBaseline, writeBaseline } from '../baseline';
 
 function parseText(resp: { content: Array<{ type: string; text: string }> }): any {
@@ -54,11 +56,7 @@ describe('MCP tool: security_scan_file', () => {
     writeBaseline(
       path.join(tmpRoot, DEFAULT_BASELINE_PATH),
       buildBaseline(
-        [{
-          line: 0, column: 0, message: 'm', severity: 2 as any, suggestion: 's',
-          code: 'DEPLOY001', pattern: 'p', category: 'infrastructure-deployment' as any,
-          filePath: 'firestore.rules',
-        }],
+        scanFile(path.join(tmpRoot, 'firestore.rules'), 'allow read, write: if true;\n', getAllRules()).map(i => ({ ...i, filePath: 'firestore.rules' })),
         'test'
       )
     );
@@ -108,11 +106,7 @@ describe('MCP tool: check_deployment_security', () => {
     writeBaseline(
       path.join(tmpRoot, DEFAULT_BASELINE_PATH),
       buildBaseline(
-        [{
-          line: 0, column: 0, message: 'm', severity: 2 as any, suggestion: 's',
-          code: 'DEPLOY001', pattern: 'p', category: 'infrastructure-deployment' as any,
-          filePath: 'firestore.rules',
-        }],
+        scanFile(path.join(tmpRoot, 'firestore.rules'), 'allow read, write: if true;\n', getAllRules()).map(i => ({ ...i, filePath: 'firestore.rules' })),
         'test'
       )
     );
@@ -122,12 +116,12 @@ describe('MCP tool: check_deployment_security', () => {
     expect(body.report).toContain('DEPLOY001');
   });
 
-  it('reports clear-to-launch on a clean project', () => {
+  it('reports limited completed coverage on a clean project', () => {
     fs.writeFileSync(path.join(tmpRoot, 'app.ts'), 'export const a = 1;\n');
     const body = parseText(handleCheckDeploymentSecurity({ project_root: tmpRoot }));
     expect(body.blocking).toBe(false);
     expect(body.findings).toEqual([]);
-    expect(body.report).toContain('Clear to launch');
+    expect(body.report).toContain('No blocking findings in completed checks');
   });
 });
 

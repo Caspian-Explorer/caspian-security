@@ -45,3 +45,8 @@ describe('clean-corpus false-positive guard', () => {
     expect(loud.length === 0 ? '' : `Unexpected findings in ${fixture}:\n${report}`).toBe('');
   });
 });
+
+// These are detection assertions. Instrumentation and scheduling must not
+// consume the analysis budget; timeout behavior is tested separately.
+beforeEach(() => { jest.spyOn(Date, 'now').mockReturnValue(0); });
+afterEach(() => { jest.restoreAllMocks(); });

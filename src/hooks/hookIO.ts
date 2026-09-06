@@ -115,3 +115,22 @@ export async function runHook(main: (input: HookInput) => number | Promise<numbe
     process.exit(0);
   }
 }
+
+/** Apply edits sequentially, exactly as the tool will, without writing to disk. */
+export function reconstructEdits(original: string, input: Record<string, unknown>): string {
+  const edits = Array.isArray(input.edits) ? input.edits : [input];
+  let result = original;
+  for (const edit of edits) {
+    if (!edit || typeof edit.old_string !== 'string' || !edit.old_string || typeof edit.new_string !== 'string') {
+      throw new Error('Unsupported edit shape');
+    }
+    const occurrences = result.split(edit.old_string).length - 1;
+    if (!occurrences || (occurrences > 1 && edit.replace_all !== true)) {
+      throw new Error('Edit target is missing or ambiguous');
+    }
+    result = edit.replace_all === true
+      ? result.split(edit.old_string).join(edit.new_string)
+      : result.replace(edit.old_string, () => edit.new_string);
+  }
+  return result;
+}

@@ -4,6 +4,16 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
+## [Unreleased]
+
+- Add `init --github --dry-run` with advisory PR workflows, optional agent integration, and stack detection. Existing workflows are preserved; baselines require explicit acceptance.
+- Add `scan --new-only --changed-since` to compare findings against Git merge-base content without executing target code.
+- Add Markdown job summaries, coverage diagnostics in JSON/SARIF, and `--strict` for incomplete scans. Deployment checks no longer claim an incomplete scan is clear to launch.
+- Reconstruct Edit/MultiEdit content before pre-write security checks.
+- Write version 2 fingerprint baselines; keep legacy count baselines readable with a CLI migration warning.
+- Stop using nearby text to suppress paid AI endpoint review; redact credential patterns in CLI JSON.
+- Pass GitHub Action inputs through quoted arguments and document external-project onboarding.
+
 ## [10.13.0] - 2026-08-14
 
 The Security Tasks checklist now opens in the main editor window. Previously it existed only in the narrow activity-bar column, where task titles and dates were truncated and there was no way to open it anywhere else.

@@ -1,45 +1,37 @@
-# Example workflow for consumers of Caspian Security.
-#
-# Drop this file into your repo at `.github/workflows/caspian-scan.yml`
-# (or any other name), commit, and you'll get a security scan on every
-# push and PR, with findings surfaced in the GitHub Security tab.
-#
-# Notes on pinning:
-#   `uses: Caspian-Explorer/caspian-security/.github/actions/scan@v10.12.0`
-# pins to a specific published release. Bump the tag when you want to pick
-# up new rules. You can also pin to a commit SHA for supply-chain hardening.
-
-name: Caspian Security Scan
+name: Caspian Security
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
-  # Daily catch-all so findings in dormant code are re-surfaced after rule updates.
-  schedule:
-    - cron: '0 6 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
-  security-events: write  # required to push SARIF into the Security tab
+
+concurrency:
+  group: caspian-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
-      - name: Caspian Security Scan
-        uses: Caspian-Explorer/caspian-security/.github/actions/scan@v10.12.0
         with:
-          # Scan the repo root (default). Point at a sub-path if you want to
-          # constrain the scope, e.g. `path: apps/web`.
-          path: .
-          # `error` fails the build on any Error-severity finding.
-          # Use `warning` to be stricter, or `never` to observe without gating.
-          fail-on: error
-          # Add comma-separated path substrings to skip. The built-in exclude
-          # list already covers node_modules, .git, out, dist, build, coverage.
-          exclude: 'test-fixtures,e2e/__snapshots__'
+          fetch-depth: 0
+          persist-credentials: false
+      # Pin the Caspian action to a reviewed commit SHA before enforcing it.
+      - uses: CaspianTools/caspian-security/.github/actions/scan@main
+        with:
+          fail-on: never
+          new-only: true
+          upload-sarif: false
+          changed-since: ${{ github.event.pull_request.base.sha || '' }}
+      - name: Keep scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: caspian-security-report
+          path: caspian-scan.sarif
+          if-no-files-found: ignore
+          retention-days: 7

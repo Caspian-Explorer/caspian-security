@@ -181,10 +181,7 @@ export const deployConfigRules: SecurityRule[] = [
   },
   {
     code: 'DEPLOY008',
-    message:
-      'This server endpoint calls a paid AI model with no rate limit in sight. Anyone who ' +
-      'finds the URL can call it in a loop and run up an unbounded model bill — LLM ' +
-      'endpoints are actively scanned for.',
+    message: 'This endpoint calls a paid AI model. Verify that authentication, rate limits, and spend controls protect this specific call. Imports and comments do not prove enforcement.',
     severity: SecuritySeverity.Warning,
     patterns: [
       /\.chat\.completions\.create\s*\(/,
@@ -193,15 +190,6 @@ export const deployConfigRules: SecurityRule[] = [
       /\bgetGenerativeModel\s*\(/,
       /\breplicate\.run\s*\(/i,
     ],
-    suppressIfNearby: [
-      /rate[-_ ]?limit/i,
-      /\blimiter\b/i,
-      /\bupstash\b/i,
-      /\bthrottl/i,
-      /\barcjet\b/i,
-      /\bslowdown\b/i,
-    ],
-    suppressNearbyWindow: 400,
     suggestion:
       'Add a per-IP or per-user rate limit before the model call (e.g. @upstash/ratelimit ' +
       'or express-rate-limit), and consider a spend cap with the model provider.',
