@@ -55,16 +55,22 @@ export function getChangedFilesSince(workspace: string, ref: string): ChangedFil
     );
   }
 
-  const rootResult = spawnSync('git', ['-C', workspace, 'rev-parse', '--show-toplevel'], { encoding: 'utf-8' });
-  if (rootResult.error || rootResult.status !== 0) { throw new Error('Cannot resolve git repository root'); }
-  const root = rootResult.stdout.trim();
+  const root = resolveGitRoot(workspace);
   const lines = result.stdout.split('\0').filter(Boolean);
   const files = new Set<string>();
   for (const rel of lines) {
-    // git prints repo-root-relative paths. Resolve against workspace so
+    // Preserve the workspace spelling, including Windows short paths.
     // the set matches the absolute paths walkFiles() produces.
     files.add(path.resolve(root, rel));
   }
 
   return { files, ref, diffCount: lines.length };
+}
+
+/** Resolve a lexical repo root without Git expanding Windows short paths or symlinks. */
+export function resolveGitRoot(workspace: string): string {
+  const result = spawnSync('git', ['-C', workspace, 'rev-parse', '--show-prefix'], { encoding: 'utf-8', timeout: 30000 });
+  if (result.error || result.status !== 0) { throw new Error('Cannot resolve git repository root'); }
+  const parents = result.stdout.trim().split('/').filter(Boolean).map(() => '..');
+  return path.resolve(workspace, ...parents);
 }

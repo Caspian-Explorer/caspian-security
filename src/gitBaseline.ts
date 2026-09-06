@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { resolveGitRoot } from './gitDiff';
 import { spawnSync } from 'child_process';
 import { buildBaseline, Baseline } from './baseline';
 import { getAllRules } from './rules';
@@ -16,7 +17,7 @@ function git(workspace: string, args: string[], maxBuffer = 50 * 1024 * 1024): s
 export function buildGitComparisonBaseline(workspace: string, ref: string, files: string[], maxFileSize: number): { baseline: Baseline; diagnostics: ScanDiagnostic[] } {
   const commit = git(workspace, ['rev-parse', '--verify', '--end-of-options', ref + '^{commit}']).trim();
   const base = git(workspace, ['merge-base', commit, 'HEAD']).trim();
-  const root = git(workspace, ['rev-parse', '--show-toplevel']).trim();
+  const root = resolveGitRoot(workspace);
   const tree = git(workspace, ['ls-tree', '-r', '-z', '--full-tree', base]);
   const blobs = new Map<string, string>();
   for (const entry of tree.split('\0')) {
