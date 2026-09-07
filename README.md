@@ -14,7 +14,7 @@ What sets it apart: **context-aware intelligence**. The scanner classifies issue
 
 > 📖 **New here?** The [complete User Guide](docs/USER_GUIDE.md) ([HTML](docs/user-guide.html)) covers every way to run Caspian — CLI, VS Code, AI agents (Claude Code / Cursor / Antigravity), and CI/CD.
 
-## Connect another project (upcoming release)
+## Connect another project (10.14.0)
 
 Add advisory pull-request checks with a setup preview, merge-base comparison, and readable job summaries. See [Connect a project](docs/CONNECT_PROJECT.md) for source-checkout instructions, optional agent setup, and migration to strict checks. These changes must be released before using the new flags through npm.
 

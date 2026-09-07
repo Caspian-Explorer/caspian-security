@@ -4,7 +4,7 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ---
 
-## [Unreleased]
+## [10.14.0] - 2026-09-07
 
 - Verify the packed npm CLI in a clean installation during CI, exclude compiled tests, include integration guides, and add a manual npm trusted-publishing workflow.
 

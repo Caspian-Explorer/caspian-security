@@ -2,9 +2,9 @@
 
 Caspian runs in your project's GitHub Actions runner. Your project stays in its own repository. Setup does not need an account, a provider API key, or a hosted Caspian service.
 
-## Try the upcoming release from this checkout
+## Try 10.14.0 from this checkout
 
-These onboarding flags are source changes until this release is published. Compile Caspian, then point its CLI at your application:
+Version 10.14.0 includes these onboarding flags. Until it is published to npm, use this checkout. Compile Caspian, then point its CLI at your application:
 
 ```sh
 npm run compile
@@ -12,7 +12,7 @@ node out/cli/caspian.js init ../your-app --github --dry-run
 node out/cli/caspian.js init ../your-app --github
 ```
 
-Review and commit the generated `.github/workflows/caspian-security.yml` in your application. It references Caspian's `main` branch, so the changes in this checkout must be merged there before the workflow can use them. Use `--action-ref <reviewed-commit-sha>` to select a specific revision instead.
+Review and commit the generated `.github/workflows/caspian-security.yml` in your application. It references Caspian's `main` branch, which includes the onboarding changes. Use `--action-ref <reviewed-commit-sha>` to select a specific revision instead.
 
 Open a pull request. The workflow checks supported changed files, compares findings with the branch's merge base, and puts a readable report in the Actions job summary. A downloadable SARIF artifact contains the full report. Manual runs check the whole project.
 

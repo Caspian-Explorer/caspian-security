@@ -1,6 +1,6 @@
 # Caspian Security — User Guide
 
-**Version 10.13.0** · Context-aware security scanning for VS Code **and** a standalone `caspian` CLI you can run anywhere.
+**Version 10.14.0** · Context-aware security scanning for VS Code **and** a standalone `caspian` CLI you can run anywhere.
 
 Caspian Security detects vulnerabilities, insecure patterns, and security best-practice violations across **code and infrastructure** — 309 rules over 14 categories, intra-file taint tracking, provider-prefix secret detection, and a git-history secret scanner. The same engine powers four surfaces:
 
@@ -45,7 +45,7 @@ Or search **"Caspian Security"** in the Extensions sidebar. Cursor/Windsurf/VSCo
 From a local `.vsix` file:
 
 ```
-code --install-extension caspian-security-10.12.0.vsix
+code --install-extension caspian-security-10.14.0.vsix
 ```
 
 ### Command line (npm)

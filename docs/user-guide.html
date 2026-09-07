@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Caspian Security — User Guide (v10.13.0)</title>
+<title>Caspian Security — User Guide (v10.14.0)</title>
 <style>
   :root {
     --bg: #0f0f1a;
@@ -109,7 +109,7 @@
 
 <nav class="toc">
   <div class="brand">🛡️ Caspian Security</div>
-  <div class="ver">User Guide · v10.13.0</div>
+  <div class="ver">User Guide · v10.14.0</div>
   <a href="#intro">Overview</a>
   <a href="#install">1. Installation</a>
   <a href="#quickstart">2. Quick start</a>
@@ -132,7 +132,7 @@
     <h1>Caspian Security — User Guide</h1>
     <p class="tagline">Context-aware security scanning for VS Code — and a standalone <code>caspian</code> CLI you can run anywhere.</p>
     <div class="badges">
-      <span class="badge">Version <strong>10.13.0</strong></span>
+      <span class="badge">Version <strong>10.14.0</strong></span>
       <span class="badge"><strong>309</strong> rules</span>
       <span class="badge"><strong>14</strong> categories</span>
       <span class="badge">9 languages + IaC</span>
@@ -153,7 +153,7 @@
 
   <h3>VS Code / Cursor / Windsurf / VSCodium</h3>
   <pre><code>code --install-extension CaspianTools.caspian-security</code></pre>
-  <p>Or search <strong>"Caspian Security"</strong> in the Extensions sidebar. Also on <a href="https://open-vsx.org">Open VSX</a>. From a local file: <code>code --install-extension caspian-security-10.13.0.vsix</code>.</p>
+  <p>Or search <strong>"Caspian Security"</strong> in the Extensions sidebar. Also on <a href="https://open-vsx.org">Open VSX</a>. From a local file: <code>code --install-extension caspian-security-10.14.0.vsix</code>.</p>
 
   <h3>Command line (npm)</h3>
   <pre><code># Zero install — runs the latest published version (any shell)
@@ -165,7 +165,7 @@ caspian --version</code></pre>
   <div class="callout"><p><strong>Testing a local build?</strong> From a clone, run <code>npm run compile</code> then <code>npm link</code> to expose a global <code>caspian</code> backed by your local build (undo with <code>npm rm -g caspian-security</code>). See <a href="#faq">Troubleshooting</a> if <code>npx</code> returns a 404.</p></div>
 
   <h3>Verify</h3>
-  <pre><code>caspian --version      # → 10.13.0
+  <pre><code>caspian --version      # → 10.14.0
 caspian --help         # full command list</code></pre>
 
   <!-- 2 -->
@@ -379,7 +379,7 @@ Then read the JSON output and act on it:
   <!-- 6 -->
   <h2 id="cicd">6. CI/CD integration</h2>
   <h3>GitHub Actions</h3>
-  <pre><code>- uses: Caspian-Explorer/caspian-security/.github/actions/scan@v10.13.0
+  <pre><code>- uses: CaspianTools/caspian-security/.github/actions/scan@main
   with:
     path: .
     fail-on: error
@@ -542,7 +542,7 @@ caspian --version
 caspian help</code></pre>
 
   <footer>
-    <p><strong>Caspian Security v10.13.0</strong> ·
+    <p><strong>Caspian Security v10.14.0</strong> ·
       <a href="https://marketplace.visualstudio.com/items?itemName=CaspianTools.caspian-security">Marketplace</a> ·
       <a href="https://github.com/CaspianTools/caspian-security">GitHub</a> ·
       <a href="https://github.com/CaspianTools/caspian-security/wiki">Wiki</a> ·

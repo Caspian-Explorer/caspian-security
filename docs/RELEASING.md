@@ -1,6 +1,6 @@
 # Release Caspian
 
-Editor releases and npm releases are separate workflows. Merging code does not publish a new npm version. The onboarding flags in the current Unreleased changelog are available from a compiled checkout until their npm release is published.
+Editor releases and npm releases are separate workflows. Merging code does not publish a new npm version. The onboarding flags introduced in 10.14.0 are available from a compiled checkout until their npm release is published.
 
 ## Verify the package
 
