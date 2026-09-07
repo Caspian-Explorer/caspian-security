@@ -4,9 +4,9 @@ Editor releases and npm releases are separate workflows. Merging code does not p
 
 ## Verify the package
 
-Run `npm ci`, `npm run lint`, `npm run test:coverage`, and `npm run test:package`. The package check compiles, creates a real tarball, checks its contents, installs it with production dependencies in a temporary project, and exercises the installed CLI. It needs registry access to install those dependencies. It never publishes.
+Run `npm ci`, `npm run lint`, `npm run compile`, `npm run test:coverage`, and `npm run test:package`. The package check compiles, creates a real tarball, checks its contents, installs it with production dependencies in a temporary project, and exercises the installed CLI. It needs registry access to install those dependencies. It never publishes.
 
-The check covers command registration, version reporting, setup preview without writes, workflow creation, and detection of an open Firebase rule. CI runs it before VSIX packaging. Normal `npm pack` and `npm publish` compile through the `prepack` script so a source checkout cannot silently publish missing build output. Compiled test fixtures are excluded; project guides are included.
+The check covers command registration, version reporting, setup preview without writes, workflow creation, and detection of an open Firebase rule. CI runs it before VSIX packaging. Normal `npm pack` and `npm publish` create a fresh production build through the `prepack` script so a source checkout cannot silently publish missing build output. VSIX packaging uses the same fresh build. Stale output and compiled test fixtures are excluded; project guides are included.
 
 ## Prepare a version
 
