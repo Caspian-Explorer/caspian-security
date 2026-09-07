@@ -5,7 +5,7 @@
   "icon": "icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Caspian-Explorer/caspian-security"
+    "url": "https://github.com/CaspianTools/caspian-security"
   },
   "version": "10.13.0",
   "publisher": "CaspianTools",
@@ -58,12 +58,16 @@
   },
   "files": [
     "out/",
+    "!out/**/__tests__/**",
     "icon.png",
     "LICENSE",
     "README.md",
     "CHANGELOG.md",
     "THREAT_MODEL.md",
-    "SECURITY.md"
+    "SECURITY.md",
+    "QUICKSTART.md",
+    "CONTRIBUTING.md",
+    "docs/"
   ],
   "contributes": {
     "commands": [
@@ -597,7 +601,9 @@
     "mcp-server": "npm run compile && node out/cli/mcpServer.js",
     "publish:vscode": "vsce publish",
     "publish:openvsx": "ovsx publish",
-    "publish:npm": "npm run compile && npm publish --access public"
+    "publish:npm": "npm run compile && npm publish --access public",
+    "prepack": "npm run compile",
+    "test:package": "npm run compile && node scripts/checkPackage.js"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

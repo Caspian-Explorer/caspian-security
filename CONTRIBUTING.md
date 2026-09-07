@@ -29,3 +29,5 @@ Reports must distinguish complete and incomplete checks. Include skipped-file re
 ## Review checklist
 
 Describe the concrete before/after behavior, include validation results, and call out migration or compatibility changes. Keep releases pinned and document the supported scope. Security reports belong through the process in SECURITY.md.
+
+For package verification and publishing, see [the release guide](docs/RELEASING.md).

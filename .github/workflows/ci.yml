@@ -64,5 +64,8 @@ jobs:
       - name: Compile
         run: npm run compile
 
+      - name: Test installed npm package
+        run: npm run test:package
+
       - name: Package VSIX
         run: npx vsce package --no-git-tag-version
