@@ -6,6 +6,8 @@ All notable changes to the Caspian Security extension are documented in this fil
 
 ## [Unreleased]
 
+- Verify the packed npm CLI in a clean installation during CI, exclude compiled tests, include integration guides, and add a manual npm trusted-publishing workflow.
+
 - Add `init --github --dry-run` with advisory PR workflows, optional agent integration, and stack detection. Existing workflows are preserved; baselines require explicit acceptance.
 - Add `scan --new-only --changed-since` to compare findings against Git merge-base content without executing target code.
 - Add Markdown job summaries, coverage diagnostics in JSON/SARIF, and `--strict` for incomplete scans. Deployment checks no longer claim an incomplete scan is clear to launch.

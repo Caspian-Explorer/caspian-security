@@ -1,0 +1,2 @@
+# Reviewed self-scan exceptions; keep rules, paths, and lines narrowly scoped.
+FILE012 scripts/checkPackage.js:30 # Required npm artifact files, not a file-upload allowlist.
